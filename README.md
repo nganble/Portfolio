@@ -1,2 +1,2 @@
-# myCode
-This repo holds code for parallel class
+# Portfolio
+This repo holds codes for multiple course projects and my research projects.
