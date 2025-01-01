@@ -10,6 +10,3 @@ This project solves the anisotropic wave equation using parallel solvers
 - Tested the codes using polynomial manufactured solutions and exact solutions
 - For manufactured solution, the computed solution expect to be exact
 - For exact solution, we will get second oreder convergence
-
-## Folder Structures 
-Paralle_Project/ |
