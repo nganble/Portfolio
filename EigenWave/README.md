@@ -1,8 +1,14 @@
-# EigenWave algorithm
+# EigenWave Algorithm
 
 ## Overview
-This project focuses on computing the eigenvalues and eigenfunctions of Laplace operator on different domains using Eigenwave algorithm. The work includes:
+This project explores the computation of eigenvalues and eigenfunctions of the Laplace operator on various domains using the EigenWave algorithm.
 
-- Implemented EigenWave algorithm in MATLAB in 1D, 2D and on an Annulus
-- Tested with various methods including: Power Iteration Method, Basic Arnoldi, Krylov-Schur (using eigs function in MATLAB)
+## Features
+- **Algorithm Implementation**:
+  - Developed the EigenWave algorithm in MATLAB for domains in 1D, 2D, and an annulus.
+- **Testing and Validation**:
+  - Verified accuracy and convergence using:
+    - Power Iteration Method
+    - Basic Arnoldi Method
+    - Krylov-Schur Method (via MATLAB's `eigs` function)
 
