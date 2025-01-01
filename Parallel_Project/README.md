@@ -1,12 +1,19 @@
-# Parallel Project
+# Parallel Solver for Anisotropic Wave Equation
 
 ## Overview
-This project solves the anisotropic wave equation using parallel solvers
+This project focuses on solving the anisotropic wave equation using finite difference. The work includes:
+- A serial implementation in C++
+- Parallel solvers developed using OpenMP and MPI for speedup
 
 ## Features
-- We used second order finite difference approximations
-- We first wrote serial code in C++
-- Developed parallel versions using OpenMP and MPI
-- Tested the codes using polynomial manufactured solutions and exact solutions
-- For manufactured solution, the computed solution expect to be exact
-- For exact solution, we will get second oreder convergence
+- **Numerical Method**: Utilizes second-order finite difference approximations for spatial and time discretization.
+- **Code Development**:
+  - Serial implementation written in C++
+  - Parallel versions developed using OpenMP and MPI
+- **Verification**:
+  - Tested using polynomial manufactured solutions (expected to match exactly)
+  - Verified second-order convergence with exact solutions
+
+## Results
+- **Manufactured Solution**: The computed solution matches the exact solution with no error.
+- **Exact Solution**: Demonstrates second-order convergence, consistent with the numerical method used.
