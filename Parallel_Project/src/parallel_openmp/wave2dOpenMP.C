@@ -1,9 +1,13 @@
-// g++ -O3 -o wave2dSerial main_serial.C
-// ./main_serial -nx=80 -tFinal=0.5 -debug=0
-// ./main_serial -nx=2048 -tFinal=0.1 -debug=0 (test for speedup)
+// g++ -fopenmp -o wave2dOpenMp wave2dOpenMP.C
+// ./wave2dOpenMP -nx=512 -tFinal=0.1 -numThreads=1 -debug=0
+// ./wave2dOpenMP -nx=80 -tFinal=0.1 -numThreads=1 -debug=0
+// ./wave2dOpenMP -nx=3072 -tFinal=0.05 -numThreads=1 -debug=0
+// ./wave2dOpenMP -nx=2048 -tFinal=0.1 -numThreads=1 -debug=0  (test for speedup)
+// Remember to use -O3 flag when compiling
+//
 // =====================================================================
 //
-// ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS SERIAL VERSION 
+// ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS
 //
 // =====================================================================
 // Solver the anisotropic equation in two-dimension
@@ -12,7 +16,16 @@
 #include <math.h>
 #include <float.h>
 #include <assert.h>
-#include "parse_command.h"
+#include <limits.h>
+#include <omp.h>
+#define REAL_EPSILON DBL_EPSILON
+#define REAL_MIN DBL_MIN
+
+// include commands tp parse command line arguments
+#include "parseCommand.h"
+
+// getCPU() : Return the current wall-clock time in seconds
+#include "getCPU.h"
 
 // Define a new type "Real" which is equivalent to a "double"
 typedef double Real;
@@ -22,30 +35,23 @@ using std::string;
 using std::max;
 using std::min;
 
-#include <ctime>
-// Function return the current wall-clock time in seconds
-inline double getCPU()
-{
-	return( 1.0*std::clock() )/CLOCKS_PER_SEC;
-}
-
 
 // function to write an array to a matlab reabable file:
 // #include "writeMatlabArray.h"
 
 
 // Macros to use later
-#define x(i1,i2) x_p[0][(i1-nd1a)+nd1*(i2-nd2a)]
-#define y(i1,i2) x_p[1][(i1-nd1a)+nd1*(i2-nd2a)]
-#define up(i1,i2) u_p[prev][(i1-nd1a)+nd1*(i2-nd2a)]
-#define uc(i1,i2) u_p[cur ][(i1-nd1a)+nd1*(i2-nd2a)]
-#define un(i1,i2) u_p[next][(i1-nd1a)+nd1*(i2-nd2a)]
-#define err(i1,i2) errCPU_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define rho(i1,i2) rho_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m11(i1,i2) m11_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m12(i1,i2) m12_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m21(i1,i2) m21_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m22(i1,i2) m22_p[(i1-nd1a)+nd1*(i2-nd2a)]
+#define x(i1, i2) x_p[0][(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define y(i1, i2) x_p[1][(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define up(i1, i2) u_p[prev][(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define uc(i1, i2) u_p[cur ][(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define un(i1, i2) u_p[next][(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define err(i1, i2) errCPU_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define rho(i1, i2) rho_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define m11(i1, i2) m11_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define m12(i1, i2) m12_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define m21(i1, i2) m21_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+#define m22(i1, i2) m22_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
 
 // Function to allocate vectors
 void allocateVectors( 
@@ -84,6 +90,7 @@ int main(int argc, char *argv[])
 	int nx = 100, ny = nx;
 	int saveMatlab = 0; // 1 = save a matlab file, 2 = save solution too
 	string matlabFileName = "wave2d.m";
+	int numThreads = 2; // number of threads for computing in parallel
 
 	string line;
 	// parse command line
@@ -96,14 +103,15 @@ int main(int argc, char *argv[])
 		else if( parseCommand( line, "-tFinal=",tFinal) ){}
 		else if( parseCommand( line,"-saveMatlab=",saveMatlab) ){}
 		else if( parseCommand( line,"-matlabFileName=",matlabFileName) ){}
+		else if(parseCommand(line, "-numThreads=", numThreads)){}
 	}
 
 	// Define the option for coefficients
-	#define CONS  1
+	#define CONS 1
 	#define VAR   2
 	#ifndef COEFF
 		#define COEFF CONS
-		//#define COEFF VAR
+		// #define COEFF VAR
 	#endif
 	
 	#if COEFF == CONS
@@ -190,25 +198,17 @@ int main(int argc, char *argv[])
 	dx[0] = (xb-xa)/nx;
 	dx[1] = (yb-ya)/ny;
 
-	/*
-	int *gridIndex_p = new int[2*numberOfDimensions];
-	#define gridIndexRange(side,axis) gridIndex_p[(side)+(axis)*numberOfDimensions]
-	gridIndexRange(0,0) = n1a; gridIndexRange(1,0) = n1b;
-	gridIndexRange(0,1) = n2a; gridIndexRange(1,1) = n2b;
-	*/
-
-	// int numIntPar = 12;
-	// int numRealPar = 15;
-
+	
 	// Declare vectors
 	Real *x_p[2], *u_p[3], *errCPU_p;
-	// Real *rpar_p; int *ipar_p;
 	Real *rho_p, *m11_p, *m12_p, *m21_p, *m22_p;
 	// Call the allocate function
 	allocateVectors(&x_p[0], &x_p[1], &u_p[0], &u_p[1], &u_p[2], &errCPU_p, 
 									&rho_p, &m11_p, &m12_p, &m21_p, &m22_p, nd);
 
 	// Fill in grid points
+	// Start parallel execution
+	#pragma omp parallel for default(shared) private(i1,i2) num_threads(numThreads)
 	for (i2=nd2a; i2<=nd2b; i2++)
 	{
 		for (i1=nd1a; i1<=nd1b; i1++)
@@ -217,26 +217,31 @@ int main(int argc, char *argv[])
 			y(i1,i2) = ya + (i2-n2a)*dx[1]; // Fill in y
 		}
 	}
+	// End parallel
 
 	// Fill in rho and matrix m
+	// Start parallel execution
+	#pragma omp parallel for default(shared) private(i1,i2) num_threads(numThreads)
 	for (i2=n2a; i2<=n2b; i2++)
 	{
 		for (i1=n1a; i1<=n1b; i1++)
 		{
-			rho(i1,i2) = RHO(x(i1,i2),y(i1,i2));
-			m11(i1,i2) = M11(x(i1,i2),y(i1,i2));
-			m12(i1,i2) = M12(x(i1,i2),y(i1,i2));
-			m21(i1,i2) = M21(x(i1,i2),y(i1,i2));
-			m22(i1,i2) = M22(x(i1,i2),y(i1,i2));
+			rho(i1,i2) = RHO(x(i1, i2), y(i1, i2));
+			m11(i1,i2) = M11(x(i1, i2), y(i1, i2));
+			m12(i1,i2) = M12(x(i1, i2), y(i1, i2));
+			m21(i1,i2) = M21(x(i1, i2), y(i1, i2));
+			m22(i1,i2) = M22(x(i1, i2), y(i1, i2));
 		}
 	}
+	// End parallel
+
 	// Check results for rho and m
-	if (debug>2)
+	if (debug > 2)
 	{
-		for( i2=n2a; i2<=n2b; i2++ )
+		for( i2 = n2a; i2 <= n2b; i2++ )
 		{
 			printf("m22(%d:%d,%d)=[", n1a, n1b, i2);
-			for( i1=n1a; i1<=n1b; i1++ )
+			for( i1 = n1a; i1 <= n1b; i1++ )
 			{
 				printf("%4.2f ", m22(i1,i2));
 
@@ -249,40 +254,23 @@ int main(int argc, char *argv[])
 
 	// Time-step restriction: // Need to check again
 	Real dt = 10.;
-	for (i2=n2a; i2<=n2b; i2++)
+	Real ind;
+	#pragma omp parallel for default(shared) private(i1,i2, ind) reduction(min: dt) num_threads(numThreads)
+	for (i2 = n2a; i2 <= n2b; i2++)
 	{
-		for (i1=n1a; i1<=n1b; i1++)
+		for (i1 = n1a; i1 <= n1b; i1++)
 		{
-			/*
-			Real ind = sqrt(RHO(x(i1,i2),y(i1,i2)))/sqrt( M11(x(i1,i2),y(i1,i2))/(dx[0]*dx[0])
-									+ (M12(x(i1,i2),y(i1,i2))+M21(x(i1,i2),y(i1,i2)))/(4*dx[0]*dx[1])
-									+ M22(x(i1,i2),y(i1,i2))/(dx[1]*dx[1]) );
-
-			// printf("min[%d,%d]=%4.5f\n", i1, i2,ind);
-			*/
-			Real ind = sqrt(rho(i1,i2))/sqrt( m11(i1,i2)/(dx[0]*dx[0])
-									+ (m12(i1,i2) + m21(i1,i2))/(4*dx[0]*dx[1])
-									+ m22(i1,i2)/(dx[1]*dx[1]) );
+			Real ind = sqrt(rho(i1,i2)) / sqrt( m11(i1,i2) / (dx[0] * dx[0])
+									+ (m12(i1,i2) + m21(i1,i2))/(4 * dx[0] * dx[1])
+									+ m22(i1,i2) / (dx[1] * dx[1]) );
 			// printf("min[%d,%d]=%4.5f\n", i1, i2,ind);
 			dt = min(dt, ind);
 		}
 	}
-	dt = cfl*dt;
-	int numSteps = ceil(tFinal/dt);
-	dt = tFinal/numSteps; // adjust dt to reach the final time
+	dt = cfl * dt;
+	int numSteps = ceil(tFinal / dt);
+	dt = tFinal / numSteps; // adjust dt to reach the final time
 	// printf("dx=%4.5f dy=%4.5f dt=%4.5f numSteps=%d\n", dx[0], dx[1], dt, numSteps);
-	
-
-	// Vectors to save integer parameters
-	/*
-	ipar_p[0]  = n1a; ipar_p[1] = n1b; ipar_p[2] = nd1a; ipar_p[3] = nd1b; ipar_p[4] = nd1;
-	ipar_p[5]  = n2a; ipar_p[6] = n2b; ipar_p[7] = nd2a; ipar_p[8] = nd2b; ipar_p[9] = nd2;
-	ipar_p[10] = nd; ipar_p[11] = numSteps;
-	// Vector to save real parameters
-	rpar_p[0] = rx; rpar_p[1] = ry; rpar_p[2] = kappa; rpar_p[3] = dx[0]; rpar_p[4] = dx[1];
-	rpar_p[5] = dt; rpar_p[6] = c0; rpar_p[7] = c1; rpar_p[8] = c2; rpar_p[9] = b0; rpar_p[10] = b1;
-	rpar_p[11] = b2; rpar_p[12] = a0; rpar_p[13] = a1; rpar_p[14] = a2;
-	*/
 
 	// update U0 and U1 to get started
 	Real t = 0.;
@@ -296,6 +284,8 @@ int main(int argc, char *argv[])
 	}
 	// Approximation for U1
 	// Use Taytor expansion and the PDE for interior points
+	// Start parallel execution
+	#pragma omp parallel for default(shared) private(i1,i2) num_threads(numThreads)
 	for (i2=n2a+1; i2<=n2b-1; i2++)
 	{
 		for (i1=n1a+1; i1<=n1b-1; i1++)
@@ -313,6 +303,8 @@ int main(int argc, char *argv[])
 					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * up(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
 		}
 	}
+	// End parallel
+
 	// Update boundary
 	for (i2 = n2a; i2 <= n2b; i2++)
 	{
@@ -327,16 +319,16 @@ int main(int argc, char *argv[])
 
 
 	// Check the approximation
-	if(debug>1)
+	if(debug > 1)
 	{
 		Real maxErr = 0;
 		Real err;
-		for( i2=n2a; i2<=n2b; i2++ )
+		for( i2 = n2a; i2 <= n2b; i2++ )
 		{
-			for( i1=n1a; i1<=n1b; i1++ )
+			for( i1 = n1a; i1 <= n1b; i1++ )
 			{
-				Real ue = UTRUE(x(i1,i2), y(i1,i2), dt);
-				err = fabs(uc(i1,i2) - UTRUE(x(i1,i2), y(i1,i2), dt));
+				Real ue = UTRUE(x(i1, i2), y(i1, i2), dt);
+				err = fabs(uc(i1, i2) - UTRUE(x(i1, i2), y(i1, i2), dt));
 				maxErr = max(err, maxErr);
 				// printf("err[%d,%d]=%6.2e, uc=%4.7f, ue=%4.7f\n", i1, i2, err, uc(i1,i2), ue);
 			}
@@ -345,23 +337,26 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 	
-	printf("----- Solving Anisotropic Wave Equation in two dimensions ------\n");
+	printf("----- Solving Anisotropic Wave Equation in two dimensions using openMP------\n");
 	printf(" saveMatlab=%d, matlabFileName=%s \n",saveMatlab,matlabFileName.c_str());
 	printf(" nx=%d ny=%d dt=%6.2e numSteps=%d tFinal=%6.2f\n", nx, ny,dt, numSteps, tFinal);
 
 	// ---------------------------- TIME-STEPPING LOOP ------------------------------
 	Real cpu1 = getCPU();
-	for(int n=0; n<numSteps-1; n++)
+	for(int n = 0; n < numSteps-1; n++)
 	{
 		t = (n+1)*dt;  // current time
 		const int prev = n%3;         // previous time level
 		const int cur  = (n+1)%3;     // current time level
 		const int next = (n+2)%3;     // next time level
 		// printf("perv=%d cur=%d next=%d\n", prev, cur, next);
+
 		// Update the interior points
-		for(i2=n2a+1; i2<=n2b-1; i2++)
+		// Start parallel execution
+		#pragma omp parallel for default(shared) private(i1, i2) num_threads(numThreads)
+		for(i2 = n2a+1; i2 <= n2b-1; i2++)
 		{
-			for(i1=n1a+1; i1<=n1b-1; i1++)
+			for(i1 = n1a+1; i1 <= n1b-1; i1++)
 			{
 				un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2))*
 					((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -
@@ -376,9 +371,10 @@ int main(int argc, char *argv[])
 					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * uc(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
 			}
 		}
+		// End parallel
 
 		// --- boundary conditions ---
-		for (i2=n2a; i2<=n2b; i2++)
+		for (i2 = n2a; i2 <= n2b; i2++)
 		{
 			un(n1a,i2) = UTRUE(x(n1a,i2),y(n1a,i2),t+dt);
 			un(n1b,i2) = UTRUE(x(n1b,i2),y(n1b,i2),t+dt);
@@ -423,6 +419,8 @@ int main(int argc, char *argv[])
 	cur = numSteps%3;
 	Real maxErr = 0.;
 	Real maxNorm = 0.;
+	// Start parallel execution
+	#pragma omp parallel for default(shared) private(i1,i2) reduction(max: maxErr,maxNorm) num_threads(numThreads)
 	for( i2=n2a; i2<=n2b; i2++ )
 	{
 		for( i1=n1a; i1<=n1b; i1++ )
@@ -430,14 +428,13 @@ int main(int argc, char *argv[])
 			err(i1,i2) = fabs(uc(i1,i2) - UTRUE(x(i1,i2), y(i1,i2),tFinal));
 			maxErr = max(err(i1,i2), maxErr);
 			maxNorm = max(uc(i1,i2), maxNorm);
-
 		}
 	}
+	// End parallel
+
 	maxErr = maxErr/maxNorm;
 	printf("CPU: numSteps=%d nx=%d maxNorm=%8.2e maxRelErr=%8.2e cpuTime=%9.2e(s)\n",
 					numSteps, nx, maxNorm, maxErr, cpuTimeStep);
-
-	
 
 	// Free allocated vectors
 	// delete [] gridIndex_p;
@@ -471,8 +468,7 @@ void allocateVectors(
 	*m22_p  = new double [nd];
 	
 }
-
-// Free all allocated vectors
+// Function to free all allocated vectors
 void freeVectors( 
 			double* x_p, double* y_p,
 			double* up_p, double* un_p,

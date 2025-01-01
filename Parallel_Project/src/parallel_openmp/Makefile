@@ -1,10 +1,10 @@
 #
-# THIS IS THE MAKE FILE FOR SERIAL CODE:
+# THIS IS THE MAKE FILE FOR OPENMP CODE:
 #
 #
 
 # First target is made by default when using "make", traditionally named "all"
-all = wave2dSerial
+all = wave2dOpenMP
 
 
 # Set names of compilers once in case we need to change them
@@ -12,7 +12,7 @@ CC = gcc
 #CXX = g++
 
 # For parallel computing
-CXX = g++
+CXX = g++ -fopenmp
 
 opt = -O3
 
@@ -23,8 +23,8 @@ opt = -O3
 	$(CXX) $(opt) -o $@ -c $<
 
 #using open MP
-wave2dSerialFiles = wave2dSerial.o
-wave2dSerial: $(wave2dSerialFiles)
-	$(CXX) $(opt) -o $@ $(wave2dSerialFiles) $(LIBS)
+wave2dOpenMPFiles = wave2dOpenMP.o
+wave2dOpenMP: $(wave2dOpenMPFiles)
+	$(CXX) $(opt) -o $@ $(wave2dOpenMPFiles) $(LIBS)
 
 clean:; rm *.o
