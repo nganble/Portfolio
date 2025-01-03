@@ -3,14 +3,14 @@
 % Compute for 1D, 2D, and the annulus using both implicit and explicit scheme
 
 
-%clc;
+clc;
 close all;
 clear all;
 global omega T option scheme c numCount geometry cfl cpu;
 
 
-%geometry = '1D';
-geometry = '2D';
+geometry = '1D';
+%geometry = '2D';
 %geometry = 'Annulus';
 
 dm = getDomain();
@@ -25,12 +25,13 @@ c = 1;
 tFinal = T;
 numCount = 0;
 
-option = 'testWaveSolver';
-%option = 'EigenWave';
+
+%option = 'testWaveSolver';
+option = 'EigenWave';
 
 
-%scheme = 'Explicit';
-scheme = 'Implicit';
+scheme = 'Explicit';
+%scheme = 'Implicit';
 
 ms = 'eigen';
 %ms = 'poly';
@@ -201,7 +202,7 @@ if(strcmp(methodName,"Power"))
     
 elseif(strcmp(methodName,"Arnoldi"))
     % Arnoldi Method
-    numTerm = 80;
+    numTerm = 40;
     tol = 1e-7; % tolerance
     H = zeros(numTerm+1,numTerm);
     Q = zeros(par.NIt,(numTerm+1)*par.NJt);
@@ -347,8 +348,18 @@ grid on;
 comLambda = sort(comLambda,'descend');
 disLambda = sort(disLambda,'descend');
 errMax = abs(comLambda-disLambda);
-fprintf("EigenWave algorithm: Nx=Ny=%d Nt=%d tFinal=%4.2f dx=%4.2e dy=%4.2e dt=%4.2e\n",...
+if (strcmp(geometry, '1D'))
+    fprintf("EigenWave algorithm: Nx=%d Nt=%d tFinal=%4.2f dx=%4.2e dt=%4.2e\n",...
+        par.Nx, par.Nt, T, par.dx, par.dt);
+elseif (strcmp(geometry, '2D'))
+
+    fprintf("EigenWave algorithm: Nx=Ny=%d Nt=%d tFinal=%4.2f dx=%4.2e dy=%4.2e dt=%4.2e\n",...
         par.Nx, par.Nt, T, par.dx, par.dy, par.dt);
+else
+    fprintf("EigenWave algorithm: Nr=%d Nth=%d Nt=%d tFinal=%4.2f dr=%4.2e dth=%4.2e dt=%4.2e\n",...
+        par.Nr, par.Nth, par.Nt, T, par.dr, par.dth, par.dt);
+
+end
 if (strcmp(scheme,'Implicit'))
     fprintf('decomTime:%5.2f(s) totalTime=%5.2f(s)\n', par.decomTime, totalTime);
 elseif (strcmp(scheme,'Explicit'))
