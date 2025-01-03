@@ -1,5 +1,5 @@
 // g++ -o wave2dSerial wave2dSerial.C
-// wave2dSerial -nx=80 -tFinal=0.5 -debug=2
+// ./wave2dSerial -nx=80 -tFinal=0.5 -debug=2
 // =====================================================================
 //
 // ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS

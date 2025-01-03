@@ -1,8 +1,8 @@
-// g++ -fopenmp -o wave2dOpenMp wave2dOpenMP.C
+// g++-14 -fopenmp -o wave2dOpenMp wave2dOpenMP.C
 // ./wave2dOpenMP -nx=512 -tFinal=0.1 -numThreads=1 -debug=0
 // ./wave2dOpenMP -nx=80 -tFinal=0.1 -numThreads=1 -debug=0
-// ./wave2dOpenMP -nx=3072 -tFinal=0.05 -numThreads=1 -debug=0
-// ./wave2dOpenMP -nx=2048 -tFinal=0.1 -numThreads=1 -debug=0  (test for speedup)
+// ./wave2dOpenMP -nx=3072 -tFinal=0.05 -numThreads=10 -debug=0
+// ./wave2dOpenMP -nx=2048 -tFinal=0.1 -numThreads=10 -debug=0  (test for speedup)
 // Remember to use -O3 flag when compiling
 //
 // =====================================================================

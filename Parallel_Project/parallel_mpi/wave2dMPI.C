@@ -1,7 +1,8 @@
 // mpic++ -O3 -o wave2dMPI wave2dMPI.C
-// mpirun -np=2 ./wave2dMPI -tFinal=.1 -nx=10 -debug=2 (for cg66 and DRP cluster)
-// mpirun -np=1 ./wave2dMPI -tFinal=.5 -nx=80 -debug=1
-// mpirun -np=1 ./wave2dMPI -tFinal=.1 -nx=2048 -debug=1 (test for speedup)
+// Note: need to create a directory named debug first
+// mpirun -np=2 ./wave2dMPI -tFinal=.1 -nx=10 -debug=0 (for cg66 and DRP cluster)
+// mpirun -np=1 ./wave2dMPI -tFinal=.5 -nx=80 -debug=0
+// mpirun -np=20 ./wave2dMPI -tFinal=.1 -nx=2048 -debug=0 (test for speedup)
 // Remember to creat a debug folder before excuting the program
 // =====================================================================
 //
@@ -137,7 +138,8 @@ int main(int argc, char *argv[])
 		// open a debug file on each processor (in the debug folder)
 		char debugFileName[80];
 		// Creat file
-		sprintf(debugFileName, "debug/debugFileNp%dProc%d.debug", np, myRank);
+		// sprintf(debugFileName, "debug/debugFileNp%dProc%d.debug", np, myRank);
+		snprintf(debugFileName, sizeof(debugFileName), "debug/debugFileNp%dProc%d.debug", np, myRank);
 		debugFile = fopen(debugFileName, "w");
 		if (debugFile == NULL && myRank == 0)
 		{

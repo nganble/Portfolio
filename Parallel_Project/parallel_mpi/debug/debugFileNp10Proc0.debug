@@ -1,0 +1,12 @@
+------------------- DebugFile -------------------
+------------------- np=10, myRank=0-------------
+
+Usage: wave2d -nx=<i> -tFinal=<f> -debug=<i> -saveMatlab=[0|1|2] -matlabFile=<s>
+----- Solving Anisotropic Wave Equation in two dimensions ------
+ saveMatlab=0, matlabFileName=wave2dMPI.m 
+ nx=200 ny=200 dt=2.49e-03 numSteps=201 tFinal=  0.50
+
+After time-stepping loop: n=201
+numSteps=201 nx=200 maxNormL=6.68e-01 maxRelErrL=7.97e-16
+ cpuTimeStepL= 1.16e-02(s)
+np=10 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=1.44e-15 cpuTimeStepG= 1.18e-02(s)
