@@ -9,9 +9,9 @@ clear all;
 global omega T option scheme c numCount geometry cfl cpu;
 
 
-geometry = '1D';
-%geometry = '2D';
-%geometry = 'Annulus';
+% geometry = '1D';
+geometry = '2D';
+% geometry = 'Annulus';
 
 dm = getDomain();
 
@@ -31,7 +31,7 @@ option = 'EigenWave';
 
 
 scheme = 'Explicit';
-%scheme = 'Implicit';
+% scheme = 'Implicit';
 
 ms = 'eigen';
 %ms = 'poly';
@@ -39,8 +39,8 @@ ms = 'eigen';
 %ms = 'pulse'; % Only for 1D
 %ms = 'mixed'; % Only for 1D
 
-%methodName = "Power";
-%methodName = "Arnoldi";
+% methodName = "Power";
+% methodName = "Arnoldi";
 methodName = "eigs";
 
 fun = getMS(dm,ms);
@@ -373,3 +373,5 @@ for j = 1:numComputed
     fprintf("%15.10f     %15.10f      %5.2e\n",...
         disLambda(j),comLambda(j),errMax(j));
 end
+refFile = sprintf('reference/%s_%s_%s.mat', geometry, scheme, methodName);
+save(refFile, 'comLambda', 'disLambda', 'omega', 'm', 'Np', 'cfl');
