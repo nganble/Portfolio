@@ -8,9 +8,9 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters  (same values as the reference runs)
-geometry   = '1D';                   % '1D' | '2D' | 'Annulus'
-methodName = 'Arnoldi';                 % 'eigs' | 'Power' | 'Arnoldi'
-m = 3;git   Np = 1;  numRequest = 2;
+geometry   = '2D';                   % '1D' | '2D' | 'Annulus'
+methodName = 'eigs';                 % 'eigs' | 'Power' | 'Arnoldi'
+m = 3;   Np = 1;  numRequest = 30;
 opts.omega = 10;  opts.T = Np*2*pi/opts.omega;
 opts.c = 1;  opts.cfl = 0.9;
 opts.scheme = 'Explicit';            % 'Explicit' | 'Implicit'
