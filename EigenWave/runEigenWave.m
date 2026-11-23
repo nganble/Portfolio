@@ -10,10 +10,10 @@ addpath(genpath(fileparts(mfilename('fullpath'))));
 %% 2. Parameters  (same values as the reference runs)
 geometry   = '2D';                   % '1D' | '2D' | 'Annulus'
 methodName = 'eigs';                 % 'eigs' | 'Power' | 'Arnoldi'
-m = 3;   Np = 1;  numRequest = 30;
+m = 2;   Np = 1;  numRequest = 16;
 opts.omega = 10;  opts.T = Np*2*pi/opts.omega;
-opts.c = 1;  opts.cfl = 0.9;
-opts.scheme = 'Explicit';            % 'Explicit' | 'Implicit'
+opts.c = 1;  opts.cfl = 0.6;
+opts.scheme = 'Implicit';            % 'Explicit' | 'Implicit'
 opts.mode = 'EigenWave';  opts.geometry = geometry;
 
 
