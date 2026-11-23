@@ -8,7 +8,7 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters  (same values as the reference runs)
-geometry   = '1D';                   % later: '2D', 'Annulus'
+geometry   = '1D';                   % '1D' | '2D'  (later: 'Annulus')
 methodName = 'eigs';                 % later: 'Power', 'Arnoldi'
 m = 2;  Np = 1;  numRequest = 16;
 opts.omega = 10;  opts.T = Np*2*pi/opts.omega;
@@ -19,7 +19,11 @@ opts.mode = 'EigenWave';  opts.geometry = geometry;
 
 %% 3. Set up domain, grid, boundary data
 dm  = getDomain(geometry);
-par = setup1D(dm, m, opts);                % later: switch on geometry
+switch geometry
+    case '1D',  par = setup1D(dm, m, opts);
+    case '2D',  par = setupRectangle(dm, m, opts);
+    otherwise,  error('runEigenWave: geometry %s not implemented yet', geometry);
+end
 fun = getMS(dm, '', opts);                 % zero BCs, zero forcing
 
 
