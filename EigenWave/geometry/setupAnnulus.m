@@ -102,6 +102,7 @@ end
 %   interior rows: A = I - (c dt)^2/2 * L_h  (5-point polar stencil)
 %   r-boundary rows: identity;  ghost/2*pi columns: u(ir,iaGhost)-u(ir,i2th) = 0,
 %   u(ir,ibth)-u(ir,iath) = 0
+par.timeFactor = 0;                    % no matrix to factorize (explicit)
 if strcmp(opts.scheme,'Implicit')
     Ng  = par.Ng;
     eqn = @(ir,ith) ir + Ngr*(ith-1);
@@ -129,7 +130,10 @@ if strcmp(opts.scheme,'Implicit')
     vals = [vals; one; -one; one; -one];
 
     A = sparse(rows, cols, vals, Ng, Ng);
+    tFactor = tic;
     par.dA = decomposition(A);
+    par.timeFactor = toc(tFactor);     % time to factorize A
+    par.sizeA = size(A,1);              % number of unknowns in A
 end
 
 % ---- Trapezoidal weights for the discrete inner product (same as dis_product.m) ----

@@ -81,6 +81,7 @@ end
 %   interior rows: (1+2r+2s) W_ij - r(W_i-1,j + W_i+1,j) - s(W_i,j-1 + W_i,j+1)
 %   with r = (c dt/dx)^2/2, s = (c dt/dy)^2/2, i.e. A = I - (c dt)^2/2 * L_h;
 %   boundary rows: identity
+par.timeFactor = 0;                    % no matrix to factorize (explicit)
 if strcmp(opts.scheme,'Implicit')
     Ng  = par.Ng;
     ex  = ones(Ngx,1);  ey = ones(Ngy,1);
@@ -89,7 +90,10 @@ if strcmp(opts.scheme,'Implicit')
     L   = kron(speye(Ngy),Dxx) + kron(Dyy,speye(Ngx));   % 5-point Laplacian, u(:) ordering
     P   = spdiags(double(par.interior(:)), 0, Ng, Ng);   % 1 on interior rows, 0 on boundary rows
     A   = P*(speye(Ng) - ((c*par.dt)^2/2)*L) + (speye(Ng) - P);
+    tFactor = tic;
     par.dA = decomposition(A);
+    par.timeFactor = toc(tFactor);     % time to factorize A
+    par.sizeA = size(A,1);              % number of unknowns in A
 end
 
 % ---- Trapezoidal weights for the discrete inner product ----

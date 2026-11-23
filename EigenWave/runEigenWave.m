@@ -8,11 +8,11 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters  (same values as the reference runs)
-geometry   = '2D';                   % '1D' | '2D' | 'Annulus'
-methodName = 'Power';                 % 'eigs' | 'Power' | 'Arnoldi'
-m = 2;  Np = 1;  numRequest = 16;
+geometry   = '1D';                   % '1D' | '2D' | 'Annulus'
+methodName = 'Arnoldi';                 % 'eigs' | 'Power' | 'Arnoldi'
+m = 3;git   Np = 1;  numRequest = 2;
 opts.omega = 10;  opts.T = Np*2*pi/opts.omega;
-opts.c = 1;  opts.cfl = 0.6;
+opts.c = 1;  opts.cfl = 0.9;
 opts.scheme = 'Explicit';            % 'Explicit' | 'Implicit'
 opts.mode = 'EigenWave';  opts.geometry = geometry;
 
@@ -33,7 +33,8 @@ lambda_h = par.lambdaExact;
 
 
 %% 5. Run the eigensolver
-S  = @(x) filterOperator(x, par, fun, opts);   % y = S_h*x (one wave solve)
+counter = SolveCounter();                       % counts the wave solves
+S  = @(x) filterOperator(x, par, fun, opts, counter);   % y = S_h*x (one wave solve)
 ip = @(a,b) innerProduct(par.fromActive(a), par.fromActive(b), par);  % weighted (a,b)_h
 x0 = par.toActive(initialGuess(par, geometry)); % initial guess (Power/Arnoldi)
 tic
@@ -46,7 +47,7 @@ switch methodName
         [comBeta, Q, info] = powerMethod(S, x0, ip, maxit, tolPower);
         fprintf('Power method: %d iterations\n', info.numIter);
     case 'Arnoldi'
-        numSteps = 40;  tolArnoldi = 1e-7;
+        numSteps = 80;  tolArnoldi = 1e-7;
         reorth = false;              % true -> full reorthogonalization
         [comBeta, Q, info] = arnoldi(S, x0, ip, numSteps, tolArnoldi, reorth);
         fprintf('Arnoldi: %d steps, %d Ritz pairs converged\n', info.numSteps, numel(comBeta));
@@ -131,6 +132,10 @@ switch geometry
 end
 fprintf('Domain: %s, Scheme: %s, Method: %s\n', geometry, opts.scheme, methodName);
 fprintf('numComputed = %d, totalTime = %5.2f(s)\n', numComputed, totalTime);
+fprintf('numWaveSolves = %d (%.1f per eigenvalue)\n', counter.n, counter.n/numComputed);
+if strcmp(opts.scheme,'Implicit')
+    fprintf('timeFactor = %.2e(s) (factorize the implicit matrix, size %d)\n', par.timeFactor, par.sizeA);
+end
 fprintf('    disLambda           comLambda          err\n');
 for j = 1:numComputed
     fprintf('%15.10f     %15.10f      %5.2e\n', disLambda(j), comLambda(j), errMax(j));

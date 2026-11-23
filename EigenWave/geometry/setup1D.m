@@ -50,13 +50,17 @@ else
 end
 
 % ---- Implicit matrix, eq. (11) in waveSchemes.pdf ----
+par.timeFactor = 0;                    % no matrix to factorize (explicit)
 if strcmp(opts.scheme,'Implicit')
     r = (1/2)*(c*par.dt/dx)^2;
     e = ones(Ngx,1);
     A = spdiags([-r*e, (1+2*r)*e, -r*e], -1:1, Ngx, Ngx);
     A(iax,:) = 0;  A(iax,iax) = 1;      % boundary row at x=a
     A(ibx,:) = 0;  A(ibx,ibx) = 1;      % boundary row at x=b
+    tFactor = tic;
     par.dA = decomposition(A,'banded');
+    par.timeFactor = toc(tFactor);     % time to factorize A
+    par.sizeA = size(A,1);              % number of unknowns in A
 end
 
 % ---- Trapezoidal weights for the discrete inner product ----
