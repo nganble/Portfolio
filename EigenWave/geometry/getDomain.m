@@ -1,5 +1,9 @@
-function dm = getDomain()
-global geometry
+function dm = getDomain(geometry)
+% GETDOMAIN: domain bounds for each geometry
+%   dm = getDomain(geometry)
+%   geometry : '1D' | '2D' | 'Annulus'
+%   dm       : LB, RB (x or r), and BB, TB (y or theta) in 2D/Annulus
+
 if (strcmp(geometry,'1D'))
     dm.LB = 0;
     dm.RB = 1;

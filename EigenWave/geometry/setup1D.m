@@ -11,14 +11,14 @@ c = opts.c;
 par.Nx  = 20*2^m;                       % number of cells
 par.Ngx = par.Nx+1;                     % total number of grid pts
 par.Ngi = par.Nx-1;                     % number of active (interior) pts
-par.dx  = (dm.RB-dm.LB)/par.Nx;
+par.dx  = (dm.RB-dm.LB)/par.Nx;         % grid spacing
 par.x   = linspace(dm.LB,dm.RB,par.Nx+1)';
 par.iax = 1;                            % index of boundary pt at x=a
 par.ibx = par.iax+par.Nx;               % index of boundary pt at x=b
-par.i1x = par.iax+1;                    % first interior pt
-par.i2x = par.ibx-1;                    % last interior pt
-par.I   = par.i1x:par.i2x;              % interior pts
-par.Ib  = par.iax:par.ibx;              % interior + boundary pts
+par.i1x = par.iax+1;                    % index of first interior pt
+par.i2x = par.ibx-1;                    % index of last interior pt
+par.I   = par.i1x:par.i2x;              % indices of interior pts
+par.Ib  = par.iax:par.ibx;              % indices of interior + boundary pts
 
 par.interior = false(par.Ngx,1);        % mask used by waveSolve
 par.interior(par.I) = true;
