@@ -8,8 +8,8 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters  (same values as the reference runs)
-geometry   = '1D';                   % '1D' | '2D'  (later: 'Annulus')
-methodName = 'eigs';                 % later: 'Power', 'Arnoldi'
+geometry   = '2D';                   % '1D' | '2D'  (later: 'Annulus')
+methodName = 'Arnoldi';                 % 'eigs' | 'Power' | 'Arnoldi'
 m = 2;  Np = 1;  numRequest = 16;
 opts.omega = 10;  opts.T = Np*2*pi/opts.omega;
 opts.c = 1;  opts.cfl = 0.6;
@@ -32,21 +32,28 @@ lambda_h = par.lambdaExact;
 
 
 %% 5. Run the eigensolver
-S = @(x) filterOperator(x, par, fun, opts);    % y = S_h*x (one wave solve)
+S  = @(x) filterOperator(x, par, fun, opts);   % y = S_h*x (one wave solve)
+ip = @(a,b) innerProduct(par.fromActive(a), par.fromActive(b), par);  % weighted (a,b)_h
+x0 = par.toActive(initialGuess(par, geometry)); % initial guess (Power/Arnoldi)
 tic
 switch methodName
     case 'eigs'
         [Q, B] = eigs(S, par.Ngi, numRequest);
         comBeta = diag(B);
     case 'Power'
-        % later: x0 = par.toActive(2*par.x.*(par.x-1).^2);  (from getICs)
-        %        [comBeta, Q] = powerMethod(S, x0, par, ...);   (solvers/)
-        error('runEigenWave: Power method not implemented yet');
+        maxit = 2000;  tolPower = 1e-8;
+        [comBeta, Q, info] = powerMethod(S, x0, ip, maxit, tolPower);
+        fprintf('Power method: %d iterations\n', info.numIter);
     case 'Arnoldi'
-        % later: [comBeta, Q] = arnoldi(S, x0, par, ...);       (solvers/)
-        error('runEigenWave: Arnoldi method not implemented yet');
+        numSteps = 40;  tolArnoldi = 1e-7;
+        reorth = false;              % true -> full reorthogonalization
+        [comBeta, Q, info] = arnoldi(S, x0, ip, numSteps, tolArnoldi, reorth);
+        fprintf('Arnoldi: %d steps, %d Ritz pairs converged\n', info.numSteps, numel(comBeta));
 end
 totalTime = toc;
+if isempty(comBeta)
+    error('runEigenWave: no eigenvalues found');
+end
 
 
 %% 6. Eigenvalues of the original problem (Rayleigh quotient)
@@ -83,7 +90,7 @@ else
     numPoints = 3*round(opts.omega/pi)+1;
 end
 
-meshPoint = linspace(0, pi*numPoints, numPoints*50+1);
+meshPoint = linspace(0, 2 * pi*numPoints, numPoints*50+1);
 
 % Continuous filter function
 figure(1);
@@ -125,8 +132,12 @@ refFile = fullfile(fileparts(mfilename('fullpath')), 'reference', ...
                    sprintf('%s_%s_%s.mat', geometry, opts.scheme, methodName));
 if isfile(refFile)
     ref = load(refFile);
-    if (ref.omega==opts.omega && ref.m==m && ref.Np==Np && ref.cfl==opts.cfl ...
-            && numel(ref.comLambda)==numComputed)
+    if (ref.omega~=opts.omega || ref.m~=m || ref.Np~=Np || ref.cfl~=opts.cfl)
+        fprintf('\nReference %s was computed with different parameters; skipped.\n', refFile);
+    elseif (numel(ref.comLambda)~=numComputed)
+        fprintf('\nReference %s has %d eigenvalues, computed %d; not compared.\n', ...
+                refFile, numel(ref.comLambda), numComputed);
+    else
         % eigs uses a random start vector -> compare sorted values with a tolerance
         diffCom = max(abs(sort(comLambda) - sort(ref.comLambda)));
         diffDis = max(abs(sort(disLambda) - sort(ref.disLambda)));
@@ -134,9 +145,17 @@ if isfile(refFile)
         if (diffCom < tol && diffDis < tol), status = 'PASS'; else, status = 'FAIL'; end
         fprintf('\nReference %s:\n  max|comLambda-ref| = %.2e, max|disLambda-ref| = %.2e  %s\n', ...
                 refFile, diffCom, diffDis, status);
-    else
-        fprintf('\nReference %s was computed with different parameters; skipped.\n', refFile);
     end
 else
     fprintf('\nNo reference file %s; skipped.\n', refFile);
+end
+
+
+% ===== local functions =====
+function u = initialGuess(par, geometry)
+% Initial guess for Power/Arnoldi (same functions as getICs.m)
+switch geometry
+    case '1D', u = 2*par.x.*(par.x-1).^2;
+    case '2D', u = cos(2*pi*par.x).*cos(pi^2*par.y);
+end
 end
