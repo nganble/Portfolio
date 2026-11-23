@@ -1,5 +1,17 @@
-function fun = getMS(dm,ms)
-global option c geometry
+function fun = getMS(dm,ms,opts)
+% GETMS: manufactured solution, boundary data, and forcing
+%   fun = getMS(dm, ms, opts)
+%   dm   : domain (LB, RB, and BB, TB in 2D/Annulus)
+%   ms   : 'poly' | 'pulse' | 'eigen' | 'trig' (depends on geometry)
+%   opts : c, geometry ('1D'|'2D'|'Annulus'), mode ('EigenWave'|'testWaveSolver')
+%   fun  : ue (exact sol), f (forcing), boundary data, u0/u1 (initial conditions)
+%          In EigenWave mode only zero boundary data and zero forcing are returned.
+
+% Simplifying notation
+c        = opts.c;
+geometry = opts.geometry;
+option   = opts.mode;
+
 if(strcmp(option,'testWaveSolver'))
     %% MS in 1D
     if(strcmp(geometry,'1D'))
@@ -12,6 +24,7 @@ if(strcmp(option,'testWaveSolver'))
             uett   = @(x,t) 0*t+(2*b2)*(c0+c1*x+c2*x.^2);
             uexx   = @(x,t) (b0+b1*t+b2*t^2).*2*c2+0*x;
         elseif(strcmp(ms,'pulse'))
+            % Pulse exact solution
             beta = 20; x0 = .25;
             fun.ue = @(x,t) exp(-(beta^2)*(x-x0-c*t).^2);
             uet    = @(x,t) 2*c*beta^2*(x-x0-c*t).*fun.ue(x,t);
@@ -26,12 +39,13 @@ if(strcmp(option,'testWaveSolver'))
             uett   = @(x,t) -lambda^2*c^2*cos(lambda*c*t)*sin(lambda*x);
             uexx   = @(x,t) -lambda^2*cos(lambda*c*t)*sin(lambda*x);
         else
+            % Other option
             %         fun.ue = @(x,t) sin(x)*(t^3);
             %         uet = @(x,t) 3*sin(x)*t^2;
             %         uett = @(x,t) 6*sin(x)*t;
             %         uexx = @(x,t) -sin(x)*t^3;
             fun.ue = @(x,t) sin(x+c*t)+cos(x-c*t);
-            uet    = @(x,t) cos(x+c*t)-sin(x-c^t);
+            uet    = @(x,t) c*cos(x+c*t)+c*sin(x-c*t);
             uett   = @(x,t) 0*x+0*t;
             uexx   = @(x,t) 0*x+0*t;
             
@@ -175,7 +189,7 @@ if(strcmp(option,'testWaveSolver'))
         end
     end
 else
-    %% Functions for WaveHoltz solver
+    %% Functions for EigenWave algorithm
     if (strcmp(geometry,'1D'))
         fun.ga = @(t) 0*t;
         fun.gb = @(t) 0*t;
