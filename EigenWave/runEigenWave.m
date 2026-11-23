@@ -8,12 +8,12 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters  (same values as the reference runs)
-geometry   = '2D';                   % '1D' | '2D'  (later: 'Annulus')
-methodName = 'Arnoldi';                 % 'eigs' | 'Power' | 'Arnoldi'
+geometry   = '2D';                   % '1D' | '2D' | 'Annulus'
+methodName = 'Power';                 % 'eigs' | 'Power' | 'Arnoldi'
 m = 2;  Np = 1;  numRequest = 16;
 opts.omega = 10;  opts.T = Np*2*pi/opts.omega;
 opts.c = 1;  opts.cfl = 0.6;
-opts.scheme = 'Implicit';            % 'Explicit' | 'Implicit'
+opts.scheme = 'Explicit';            % 'Explicit' | 'Implicit'
 opts.mode = 'EigenWave';  opts.geometry = geometry;
 
 
@@ -22,7 +22,8 @@ dm  = getDomain(geometry);
 switch geometry
     case '1D',  par = setup1D(dm, m, opts);
     case '2D',  par = setupRectangle(dm, m, opts);
-    otherwise,  error('runEigenWave: geometry %s not implemented yet', geometry);
+    case 'Annulus', par = setupAnnulus(dm, m, opts);
+    otherwise,  error('runEigenWave: unknown geometry %s', geometry);
 end
 fun = getMS(dm, '', opts);                 % zero BCs, zero forcing
 
@@ -117,8 +118,17 @@ comLambda = sort(comLambda, 'descend');
 disLambda = sort(disLambda, 'descend');
 errMax = abs(comLambda-disLambda);
 
-fprintf('EigenWave algorithm: Nx=%d Nt=%d T=%4.2f dx=%4.2e dt=%4.2e\n', ...
-        par.Nx, par.Nt, opts.T, par.dx, par.dt);
+switch geometry
+    case '1D'
+        fprintf('EigenWave algorithm: Nx=%d Nt=%d T=%4.2f dx=%4.2e dt=%4.2e\n', ...
+                par.Nx, par.Nt, opts.T, par.dx, par.dt);
+    case '2D'
+        fprintf('EigenWave algorithm: Nx=Ny=%d Nt=%d T=%4.2f dx=%4.2e dy=%4.2e dt=%4.2e\n', ...
+                par.Nx, par.Nt, opts.T, par.dx, par.dy, par.dt);
+    case 'Annulus'
+        fprintf('EigenWave algorithm: Nr=%d Nth=%d Nt=%d T=%4.2f dr=%4.2e dth=%4.2e dt=%4.2e\n', ...
+                par.Nr, par.Nth, par.Nt, opts.T, par.dr, par.dth, par.dt);
+end
 fprintf('Domain: %s, Scheme: %s, Method: %s\n', geometry, opts.scheme, methodName);
 fprintf('numComputed = %d, totalTime = %5.2f(s)\n', numComputed, totalTime);
 fprintf('    disLambda           comLambda          err\n');
@@ -157,5 +167,6 @@ function u = initialGuess(par, geometry)
 switch geometry
     case '1D', u = 2*par.x.*(par.x-1).^2;
     case '2D', u = cos(2*pi*par.x).*cos(pi^2*par.y);
+    case 'Annulus', u = 2*par.x.*(par.x-pi).^2.*par.y.^2.*(1-par.y).^3;
 end
 end

@@ -1,7 +1,9 @@
-% Convergence test for the wave solver (core/waveSolve.m) in 1D and 2D:
-%   poly  : exact for quadratics -> maxErr ~ machine precision
+% Convergence test for the wave solver (core/waveSolve.m) in 1D, 2D, and on the annulus:
+%   1D/2D poly             : exact for quadratics -> maxErr ~ machine precision
 %   1D pulse, eigen        : second order -> ratio -> 4
 %   2D trig, eigen         : second order -> ratio -> 4
+%   Annulus poly,trig,eigen: second order -> ratio -> 4 (polar stencil is not
+%                            exact for polynomials in x,y)
 %   1D tables are in waveSchemes.pdf.
 
 clc; clear; close all;
@@ -10,7 +12,7 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters
-geometry = '2D';                    % '1D' | '2D'  (later: 'Annulus')
+geometry = 'Annulus';                    % '1D' | '2D' | 'Annulus'
 
 opts.c        = 1;                  % wave speed
 opts.cfl      = 0.9;                % CFL number
@@ -19,24 +21,31 @@ opts.omega    = 10;                 % not used for this test (filter only)
 opts.mode     = 'testWaveSolver';
 opts.geometry = geometry;
 
-dm = getDomain(geometry);           % 1D: [0,1], 2D: [0,1]x[0,1]
+dm = getDomain(geometry);           % 1D: [0,1], 2D: [0,1]^2, Annulus: 0.5<=r<=2
 schemes = {'Explicit','Implicit'};
 switch geometry
     case '1D'
         tests = {'poly','pulse','eigen'};
+        exactTests = {'poly'};      % should be exact up to round-off
         mList = 1:6;                % Nx = 20*2^m     = 40,...,1280
         setupGrid = @setup1D;
     case '2D'
         tests = {'poly','trig','eigen'};
+        exactTests = {'poly'};
         mList = 1:5;                % Nx = Ny = 20*2^(m-1) = 20,...,320
         setupGrid = @setupRectangle;
+    case 'Annulus'
+        tests = {'poly','trig','eigen'};
+        exactTests = {};            % nothing is exact on the polar grid
+        mList = 1:5;                % Nr = 5*2^m = 10,...,160, Nth = 2*Nr
+        setupGrid = @setupAnnulus;
     otherwise
-        error('runWaveSolverTest: geometry %s not implemented yet', geometry);
+        error('runWaveSolverTest: unknown geometry %s', geometry);
 end
 nM = numel(mList);
 
-doPlot       = false;
-saveBaseline = false;               % true -> reference/waveSolverBaseline[_2D].mat
+doPlot       = true;
+saveBaseline = true;               % true -> reference/waveSolverBaseline[_2D].mat
 
 %% 3. Convergence study
 results = struct();
@@ -55,20 +64,20 @@ for is = 1:numel(schemes)
             par = setupGrid(dm, m, opts);   % grid, dt, Nt, (dA if implicit)
 
             % Initial conditions
-            V0 = gridEval(fun.u0, par, geometry);
-            V1 = gridEval(fun.u1, par, geometry);
+            V0 = gridEval(fun.u0, par, geometry, ms);
+            V1 = gridEval(fun.u1, par, geometry, ms);
 
             % Solve to t = T
             [~, W] = waveSolve(V0, V1, par, fun, opts);
 
             % Max-norm error at t = T
-            uexact = gridEval(@(varargin) fun.ue(varargin{:}, opts.T), par, geometry);
+            uexact = gridEval(@(varargin) fun.ue(varargin{:}, opts.T), par, geometry, ms);
             err(k) = max(abs(W - uexact), [], 'all');
-            Nx(k)  = par.Nx;
+            [Nx(k), nName] = gridSize(par, geometry);
 
-            % Same format as waveSchemes.pdf
-            fprintf('ms=%s: t=%.2e: m=%d Nx=%4d Nt=%4d dt=%.2e maxErr=%.2e', ...
-                    ms, opts.T, k, par.Nx, par.Nt, par.dt, err(k));
+            % Same format as waveSchemes.pdf (Nx, or Nr on the annulus)
+            fprintf('ms=%s: t=%.2e: m=%d %s=%4d Nt=%4d dt=%.2e maxErr=%.2e', ...
+                    ms, opts.T, k, nName, Nx(k), par.Nt, par.dt, err(k));
             if k > 1
                 fprintf(' ratio=%5.2f', err(k-1)/err(k));
             end
@@ -82,16 +91,18 @@ end
 %% 4. Pass/fail checks
 fprintf('=========== Checks (%s) ===========\n', geometry);
 allPass = true;
-convTests = setdiff(tests, {'poly'}, 'stable');   % tests that should converge at 2nd order
+convTests = setdiff(tests, exactTests, 'stable');  % tests that should converge at 2nd order
 for is = 1:numel(schemes)
     s = schemes{is};
     r = results.(s);
 
-    % poly: exact up to round-off
-    ok = max(r.poly.err) < 1e-10;
-    fprintf('%-8s poly : max err = %.1e              %s\n', ...
-            s, max(r.poly.err), passStr(ok));
-    allPass = allPass && ok;
+    % exact tests: error at round-off level
+    for ms = exactTests
+        e  = max(r.(ms{1}).err);
+        ok = e < 1e-10;
+        fprintf('%-8s %-5s: max err = %.1e              %s\n', s, ms{1}, e, passStr(ok));
+        allPass = allPass && ok;
+    end
 
     % other tests: observed order on the two finest grids >= 1.8
     for ms = convTests
@@ -141,10 +152,24 @@ function s = passStr(ok)
 if ok, s = 'PASS'; else, s = 'FAIL'; end
 end
 
-function u = gridEval(f, par, geometry)
-% Evaluate f on the grid: f(x) in 1D, f(x,y) in 2D
+function u = gridEval(f, par, geometry, ms)
+% Evaluate f on the grid: f(x) in 1D, f(x,y) in 2D and on the annulus
+% (the annulus 'eigen' solution in getMS is written in polar form f(r,theta))
 switch geometry
-    case '1D', u = f(par.x);
-    case '2D', u = f(par.x, par.y);
+    case '1D'
+        u = f(par.x);
+    case '2D'
+        u = f(par.x, par.y);
+    case 'Annulus'
+        if strcmp(ms,'eigen'), u = f(par.r, par.th);
+        else,                  u = f(par.x, par.y);
+        end
+end
+end
+
+function [n, name] = gridSize(par, geometry)
+% Number of cells used to label the grid (Nx, or Nr on the annulus)
+if strcmp(geometry,'Annulus'), n = par.Nr; name = 'Nr';
+else,                          n = par.Nx; name = 'Nx';
 end
 end
