@@ -1,7 +1,8 @@
-% Convergence test for the 1D wave solver (core/waveSolve.m):
+% Convergence test for the wave solver (core/waveSolve.m) in 1D and 2D:
 %   poly  : exact for quadratics -> maxErr ~ machine precision
-%   pulse : second order         -> ratio -> 4
-%   eigen : second order         -> ratio -> 4
+%   1D pulse, eigen        : second order -> ratio -> 4
+%   2D trig, eigen         : second order -> ratio -> 4
+%   1D tables are in waveSchemes.pdf.
 
 clc; clear; close all;
 
@@ -9,28 +10,39 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters
-dm.LB = 0;  dm.RB = 1;              % domain [a,b]
+geometry = '2D';                    % '1D' | '2D'  (later: 'Annulus')
 
 opts.c        = 1;                  % wave speed
 opts.cfl      = 0.9;                % CFL number
-opts.T        = .65;                  % final time (try 0.7 for 'eigen')
+opts.T        = .65;                % final time
 opts.omega    = 10;                 % not used for this test (filter only)
 opts.mode     = 'testWaveSolver';
-opts.geometry = '1D';
+opts.geometry = geometry;
 
+dm = getDomain(geometry);           % 1D: [0,1], 2D: [0,1]x[0,1]
 schemes = {'Explicit','Implicit'};
-tests   = {'poly','pulse','eigen'};
-mList   = 1:6;                      % Nx = 20*2^m = 40,...,1280
-nM      = numel(mList);
+switch geometry
+    case '1D'
+        tests = {'poly','pulse','eigen'};
+        mList = 1:6;                % Nx = 20*2^m     = 40,...,1280
+        setupGrid = @setup1D;
+    case '2D'
+        tests = {'poly','trig','eigen'};
+        mList = 1:5;                % Nx = Ny = 20*2^(m-1) = 20,...,320
+        setupGrid = @setupRectangle;
+    otherwise
+        error('runWaveSolverTest: geometry %s not implemented yet', geometry);
+end
+nM = numel(mList);
 
 doPlot       = false;
-saveBaseline = true;               % true -> reference/waveSolverBaseline.mat
+saveBaseline = false;               % true -> reference/waveSolverBaseline[_2D].mat
 
 %% 3. Convergence study
 results = struct();
 for is = 1:numel(schemes)
     opts.scheme = schemes{is};
-    fprintf('\n=========== %s scheme ===========\n', opts.scheme);
+    fprintf('\n=========== %s: %s scheme ===========\n', geometry, opts.scheme);
 
     for it = 1:numel(tests)
         ms  = tests{it};
@@ -40,20 +52,21 @@ for is = 1:numel(schemes)
         err = zeros(nM,1);
         for k = 1:nM
             m   = mList(k);
-            par = setup1D(dm, m, opts);     % grid, dt, Nt, (dA if implicit)
+            par = setupGrid(dm, m, opts);   % grid, dt, Nt, (dA if implicit)
 
             % Initial conditions
-            V0 = fun.u0(par.x);
-            V1 = fun.u1(par.x);
+            V0 = gridEval(fun.u0, par, geometry);
+            V1 = gridEval(fun.u1, par, geometry);
 
             % Solve to t = T
             [~, W] = waveSolve(V0, V1, par, fun, opts);
 
             % Max-norm error at t = T
-            err(k) = max(abs(W - fun.ue(par.x, opts.T)));
+            uexact = gridEval(@(varargin) fun.ue(varargin{:}, opts.T), par, geometry);
+            err(k) = max(abs(W - uexact), [], 'all');
             Nx(k)  = par.Nx;
 
-            % Same format as waveSchemes.pdf (level k = 1 <-> Nx = 20)
+            % Same format as waveSchemes.pdf
             fprintf('ms=%s: t=%.2e: m=%d Nx=%4d Nt=%4d dt=%.2e maxErr=%.2e', ...
                     ms, opts.T, k, par.Nx, par.Nt, par.dt, err(k));
             if k > 1
@@ -67,8 +80,9 @@ for is = 1:numel(schemes)
 end
 
 %% 4. Pass/fail checks
-fprintf('=========== Checks ===========\n');
+fprintf('=========== Checks (%s) ===========\n', geometry);
 allPass = true;
+convTests = setdiff(tests, {'poly'}, 'stable');   % tests that should converge at 2nd order
 for is = 1:numel(schemes)
     s = schemes{is};
     r = results.(s);
@@ -79,8 +93,8 @@ for is = 1:numel(schemes)
             s, max(r.poly.err), passStr(ok));
     allPass = allPass && ok;
 
-    % pulse/eigen: observed order on the two finest grids >= 1.8
-    for ms = {'pulse','eigen'}
+    % other tests: observed order on the two finest grids >= 1.8
+    for ms = convTests
         e = r.(ms{1}).err;
         p = log2(e(end-1)/e(end));
         ok = p > 1.8;
@@ -97,24 +111,27 @@ if doPlot
     for is = 1:numel(schemes)
         s = schemes{is};
         subplot(1, numel(schemes), is);
-        for ms = {'pulse','eigen'}
+        for ms = convTests
             r = results.(s).(ms{1});
             loglog(r.Nx, r.err, 'o-', 'LineWidth', 1.5, ...
                    'DisplayName', ms{1}); hold on;
         end
-        % Reference slope Nx^(-2) anchored at the pulse curve
-        Nx = results.(s).pulse.Nx;
-        e0 = results.(s).pulse.err(1);
-        loglog(Nx, e0*(Nx/Nx(1)).^(-2), 'k--', 'DisplayName', 'O(\Delta x^2)');
+        % Reference slope Nx^(-2) anchored at the first convergence test
+        r  = results.(s).(convTests{1});
+        loglog(r.Nx, r.err(1)*(r.Nx/r.Nx(1)).^(-2), 'k--', 'DisplayName', 'O(\Delta x^2)');
         grid on; xlabel('N_x'); ylabel('max error at t = T');
-        title(sprintf('%s scheme', s)); legend('Location', 'southwest');
+        title(sprintf('%s: %s scheme', geometry, s)); legend('Location', 'southwest');
     end
 end
 
 %% 6. Save baseline
 if saveBaseline
-    outFile = fullfile(fileparts(mfilename('fullpath')), ...
-                       'reference', 'waveSolverBaseline.mat');
+    if strcmp(geometry,'1D')
+        fname = 'waveSolverBaseline.mat';            % keep the existing 1D name
+    else
+        fname = sprintf('waveSolverBaseline_%s.mat', geometry);
+    end
+    outFile = fullfile(fileparts(mfilename('fullpath')), 'reference', fname);
     save(outFile, 'results', 'opts', 'mList', 'dm');
     fprintf('Saved baseline to %s\n', outFile);
 end
@@ -122,4 +139,12 @@ end
 % ===== local functions =====
 function s = passStr(ok)
 if ok, s = 'PASS'; else, s = 'FAIL'; end
+end
+
+function u = gridEval(f, par, geometry)
+% Evaluate f on the grid: f(x) in 1D, f(x,y) in 2D
+switch geometry
+    case '1D', u = f(par.x);
+    case '2D', u = f(par.x, par.y);
+end
 end
