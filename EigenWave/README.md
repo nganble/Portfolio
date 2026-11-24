@@ -35,6 +35,7 @@ geometry/             getDomain, setup1D, setupRectangle, setupAnnulus
 manufactured/         getMS (exact solutions, forcing, BCs)
 solvers/              powerMethod, arnoldi
 reference/            saved results used for regression checks
+docs/                 waveSchemes.pdf (schemes, eigenvalues, convergence tables), Wave_1D.m (1D baseline script)
 ```
 
 
@@ -108,7 +109,7 @@ reference/            saved results used for regression checks
 
 
 ## Reference
-- D. Appelö, J. W. Banks, W. D. Henshaw, *EigenWave: An optimal $\mathcal{O}(N)$ method for computing eigenvalues and eigenvectors by time-filtering the wave equation*, Journal of Computational Physics, Volume 555, 2026, 114758, ISSN 0021-9991. [doi:10.1016/j.jcp.2026.114758](https://doi.org/10.1016/j.jcp.2026.114758)
+- D. Appelö, J. W. Banks, W. D. Henshaw, N. Le, D. Schwendeman, *EigenWave: An optimal $\mathcal{O}(N)$ method for computing eigenvalues and eigenvectors by time-filtering the wave equation*, Journal of Computational Physics, Volume 555, 2026, 114758, ISSN 0021-9991. [doi:10.1016/j.jcp.2026.114758](https://doi.org/10.1016/j.jcp.2026.114758)
 
 
 
