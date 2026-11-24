@@ -23,6 +23,7 @@ The domains are the unit interval $[0,1]$, the unit square $[0,1]^2$, and the an
 - **Verification and validation**
   - Wave solver: manufactured solutions (poly, pulse, trig, eigen). Poly is exact to round-off in 1D/2D; all other tests converge at second order. On the annulus, poly also converges at second order, since the polar stencil is not exact for polynomials in $x, y$.
   - EigenWave: results are checked against saved reference values in `reference/` (agreement to about 1e-14 for `eigs` and 1e-11 for Arnoldi); `runEigenWave.m` prints PASS/FAIL.
+  - The schemes (explicit and implicit, 1D, 2D and annulus), the exact and discrete eigenvalues, and the convergence tables are documented in [docs/waveSchemes.pdf](docs/waveSchemes.pdf).
 
 
 ## Repository layout

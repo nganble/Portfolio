@@ -1,0 +1,772 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{fancyvrb}   % framed Verbatim blocks for the numerical results
+\usepackage{hyperref}
+
+\title{Numerical Schemes for Wave Equations}
+\author{Ngan Le}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Wave equation in one dimension}
+Consider the one dimensional wave equation with Dirichlet boundary conditions
+\begin{subequations}
+\label{eq:1DWaveEquation}
+\begin{align}
+  &w_{tt} = c^2 w_{xx} + f(x,t), && x \in (a,b), \quad 0 \leq t \leq t_{\text{final}}, \\
+  &w(a,t) = g_a(t), \quad w(b,t) = g_b(t), && 0 \leq t \leq t_{\text{final}}, \\
+  &w(x,0) = v_0(x), \quad w_t(x,0) = v_1(x), && a \leq x \leq b.
+\end{align}
+\end{subequations}
+\subsection{Explicit scheme}
+The numerical scheme using second-order accurate finite difference approximations for the wave equation is given by
+\begin{subequations}
+\label{eq:1DWaveExplicit}
+\begin{itemize}
+    \item \textcolor{blue}{Difference equation:}
+    \begin{align}
+        D_{+t}D_{-t}W_j^n &= c^2D_{+x}D_{-x}W_j^n+f(x_j,t^n), \label{eq:1DWaveExplicitA}
+        \\
+        &\quad j=1,2,\dots,N_x-1, \quad n=1,\dots, N_t-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Initial conditions:}
+    \begin{align}
+        & W_j^0=V_{0,j}, && j=1,2,\dots,N_x-1, \label{eq:1DWaveExplicitB}\\
+        & W_j^1=V_{0,j}+\Delta t V_{1,j}+\dfrac{\Delta t^2}{2}\left[c^2D_{+x}D_{-x} V_{0,j} + f(x_j,0)\right], \label{eq:1DWaveExplicitC}\\
+        & &&j=1,2,\dots,N_x-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Boundary conditions:}
+    \begin{align}
+        & W_0^n=g_a(t^n), \quad W_{N_x}^n=g_b(t^n), && n=0,1,\dots,N_t. \label{eq:1DWaveExplicitD}
+    \end{align}
+\end{itemize}
+\end{subequations}
+where
+\begin{subequations}
+\begin{align}
+& x_j = a + j\Delta x, \quad \Delta x = \dfrac{b-a}{N_x}, \quad W_j^n \approx w(x_j,t^n), \quad V_{0,j}=v_0(x_j), \quad  V_{1,j}=v_1(x_j), \\
+& D_{+x}W_j^n = \dfrac{W_{j+1}^n-W_{j}^n}{\Delta x}, \quad D_{-x}W_j^n = \dfrac{W_{j}^n-W_{j-1}^n}{\Delta x}, \\
+& D_{+t}W_j^n = \dfrac{W_{j}^{n+1}-W_{j}^n}{\Delta t}, \quad D_{-t}W_j^n = \dfrac{W_{j}^n-W_{j}^{n-1}}{\Delta t}. 
+\end{align}
+\end{subequations}
+Derivation of $W_j^1$ is as follows. We have
+\begin{align}
+w(x,\Delta t) = w(x,0)+\Delta t w_t(x,0)+\dfrac{\Delta t^2}{2}w_{tt}(x,0)+\mathcal{O}(\Delta t^3).
+\end{align}
+From the PDE
+\begin{align}
+w_{tt}(x,0)&=c^2w_{xx}(x,0)+f(x,0) \notag \\
+&=c^2\partial_x^2v_0(x)+f(x,0).
+\end{align}
+Thus,
+\begin{align}
+w(x,\Delta t) \approx  w(x,0)+\Delta t v_1(x)+\dfrac{\Delta t^2}{2}\left(c^2\partial_x^2v_0(x)+f(x,0) \right).
+\end{align}
+Therefore, we get the approximation $W_j^1$. Another way to derive this is to use $D_{0t}W_j^0=V_{1,j}$ to solve for $W_j^{-1}$ and use this in the difference equation~\eqref{eq:1DWaveExplicitA} for $n=0$ to solve for $W_j^1$ (see the derivation for implicit scheme below), where
+\begin{align}
+D_{0t}W_j^n=\dfrac{W_{j}^{n+1}-W_{j}^{n-1}}{2\Delta t}.
+\end{align}
+
+Here are the numerical results on the domain $(a,b)=(0,1)$.
+\begin{enumerate}
+\item Polynomial manufactured solution (should be ``exact'', i.e. machine epsilon, for polynomial up to degree two).
+\begin{align*}
+w(x,t)=(b_0+b_1t+b_2t^2)(c_0+c_1x+c_2 x^2).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=poly: t=6.50e-01: m=1 Nx=  40 Nt=  29 dt=2.24e-02 maxErr=2.66e-15
+ms=poly: t=6.50e-01: m=2 Nx=  80 Nt=  58 dt=1.12e-02 maxErr=5.33e-15 ratio= 0.50 rate=-1.00
+ms=poly: t=6.50e-01: m=3 Nx= 160 Nt= 116 dt=5.60e-03 maxErr=1.33e-14 ratio= 0.40 rate=-1.32
+ms=poly: t=6.50e-01: m=4 Nx= 320 Nt= 232 dt=2.80e-03 maxErr=2.75e-14 ratio= 0.48 rate=-1.05
+ms=poly: t=6.50e-01: m=5 Nx= 640 Nt= 463 dt=1.40e-03 maxErr=4.04e-14 ratio= 0.68 rate=-0.55
+ms=poly: t=6.50e-01: m=6 Nx=1280 Nt= 925 dt=7.03e-04 maxErr=9.99e-14 ratio= 0.40 rate=-1.31
+\end{Verbatim}
+
+\item Pulse solution (exact solution, no forcing and should get second-order convergence rate).
+\begin{align*}
+w(x,t)=e^{-\beta^2(x-x_0-ct)^2}.
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=pulse: t=6.50e-01: m=1 Nx=  40 Nt=  29 dt=2.24e-02 maxErr=1.31e-01
+ms=pulse: t=6.50e-01: m=2 Nx=  80 Nt=  58 dt=1.12e-02 maxErr=3.19e-02 ratio= 4.10 rate= 2.04
+ms=pulse: t=6.50e-01: m=3 Nx= 160 Nt= 116 dt=5.60e-03 maxErr=7.49e-03 ratio= 4.26 rate= 2.09
+ms=pulse: t=6.50e-01: m=4 Nx= 320 Nt= 232 dt=2.80e-03 maxErr=1.86e-03 ratio= 4.02 rate= 2.01
+ms=pulse: t=6.50e-01: m=5 Nx= 640 Nt= 463 dt=1.40e-03 maxErr=4.57e-04 ratio= 4.07 rate= 2.03
+ms=pulse: t=6.50e-01: m=6 Nx=1280 Nt= 925 dt=7.03e-04 maxErr=1.13e-04 ratio= 4.03 rate= 2.01
+\end{Verbatim}
+
+
+\item Test eigenfunction (optional, exact solution)
+\begin{align*}
+w(x,t)=\cos(\lambda c t)\sin(\lambda x).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=eigen: t=6.50e-01: m=1 Nx=  40 Nt=  29 dt=2.24e-02 maxErr=9.18e-05
+ms=eigen: t=6.50e-01: m=2 Nx=  80 Nt=  58 dt=1.12e-02 maxErr=2.29e-05 ratio= 4.00 rate= 2.00
+ms=eigen: t=6.50e-01: m=3 Nx= 160 Nt= 116 dt=5.60e-03 maxErr=5.73e-06 ratio= 4.00 rate= 2.00
+ms=eigen: t=6.50e-01: m=4 Nx= 320 Nt= 232 dt=2.80e-03 maxErr=1.43e-06 ratio= 4.00 rate= 2.00
+ms=eigen: t=6.50e-01: m=5 Nx= 640 Nt= 463 dt=1.40e-03 maxErr=3.52e-07 ratio= 4.07 rate= 2.03
+ms=eigen: t=6.50e-01: m=6 Nx=1280 Nt= 925 dt=7.03e-04 maxErr=8.72e-08 ratio= 4.04 rate= 2.01
+\end{Verbatim}
+\end{enumerate}
+
+\subsection{Implicit scheme}
+The implicit scheme using second-order accurate finite difference approximations is given by
+\begin{subequations}
+\label{eq:1DWaveImplicit}
+\begin{itemize}
+    \item \textcolor{blue}{Difference equation:}
+    \begin{align}
+        D_{+t}D_{-t}W_j^n &= c^2D_{+x}D_{-x}\left(\dfrac{W_j^{n+1}+W_j^{n-1}}{2}\right) + \dfrac{f(x_j,t^{n+1})+f(x_j,t^{n-1})}{2}, \label{eq:1DWaveImplicitA}
+        \\
+        &\quad j=1,2,\dots,N_x-1, \quad n=1,\dots, N_t-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Initial conditions:}
+    \begin{align}
+        & W_j^0 = V_{0,j}, && j=1,2,\dots,N_x-1 \label{eq:1DWaveImplicitB}\\
+        & D_{0t}W_j^0  = V_{1,j}, && j=1,2,\dots,N_x-1. \label{eq:1DWaveImplicitC}
+    \end{align}
+
+    \item \textcolor{blue}{Boundary conditions:}
+    \begin{equation}
+        W_0^n = g_a(t^n), \quad W_{N_x}^n = g_b(t^n), \quad n=0, 1,\dots, N_t.  \label{eq:1DWaveImplicitD}
+    \end{equation} 
+\end{itemize}
+\end{subequations}
+
+We can rewrite the difference equation in~\eqref{eq:1DWaveImplicitA} as
+\begin{align}
+W_j^{n+1}-\dfrac{c^2\Delta t^2}{2 \Delta x^2}\left (W_{j+1}^{n+1}-2W_{j}^{n+1}+W_{j-1}^{n+1}\right) & = 2W_j^n-W_j^{n-1}+\dfrac{c^2\Delta t^2}{2} D_{+x}D_{-x}W_j^{n-1}\\
+&+\dfrac{\Delta t^2}{2}\left(f_j^{n+1}+f_{j}^{n-1}\right). \notag
+\end{align}
+In a compact form
+\begin{align}
+-rW_{j-1}^{n+1}+(1+2r)W_j^{n+1}-rW_{j+1}^{n+1}=G_j^n, \quad j=1,2,\dots,N_x-1,\; n=1,2,\dots,N_t-1,
+\end{align}
+where
+\begin{align*}
+r=\dfrac{c^2\Delta t^2}{2\Delta x^2},\quad G_j^n=2W_j^n-W_j^{n-1}+\dfrac{c^2\Delta t^2}{2} D_{+x}D_{-x}W_j^{n-1}+\dfrac{\Delta t^2}{2}\left[f_j^{n+1}+f_{j}^{n-1}\right].
+\end{align*}
+Combining with the boundary conditions, we obtain a system of equations
+\begin{align}
+\label{eq:1DWaveImplicitSystem}
+\begin{bmatrix}
+1 & & & & & & \\
+-r & 1+2r & -r & & & &\\
+& -r & 1+2r & -r & & & \\
+& & \ddots & \ddots & \ddots & &\\
+& & & -r & 1+2r & -r &\\
+& & & & -r & 1+2r & -r\\
+& & & & & & 1
+\end{bmatrix}\begin{bmatrix}
+W_0^{n+1}\\ W_1^{n+1}\\ W_2^{n+1}\\ \vdots \\ W_{N_x-2}^{n+1} \\W_{N_x-1}^{n+1} \\ W_{N_x}^{n+1}
+\end{bmatrix}=\begin{bmatrix}
+G_0^n \\ G_1^n \\ G_2^n \\ \vdots \\ G_{N_x-2}^n \\ G_{N_x-1}^n \\ G_{N_x}^n
+\end{bmatrix},
+\end{align}
+for $n=1,\cdots, N_t-1$, where
+\begin{align}
+G_0^n=g_a(t^{n+1}), \quad G_{N_x}^n=g_b(t^{n+1}).
+\end{align}
+For the first time step $W_j^1$, solving for $W_{j}^{-1}$ from~\eqref{eq:1DWaveImplicitC} we get
+\begin{align}
+W_{j}^{-1} = W_{j}^{1}-2\Delta t V_{1,j}. 
+\end{align} 
+The difference equation at $n=0$ becomes
+\begin{align}
+W_j^{1}-\dfrac{c^2\Delta t^2}{2 \Delta x^2}\left (W_{j+1}^{1}-2W_{j}^{1}+W_{j-1}^{1}\right) & = 2W_j^0-W_j^{-1}+\dfrac{c^2\Delta t^2}{2} D_{+x}D_{-x}W_j^{-1}
+\\
+&+\dfrac{\Delta t^2}{2}\left(f_j^{1}+f_{j}^{-1}\right). \notag
+\end{align}
+Substituting the formula for $W_j^{-1}$ yields
+\begin{align}
+W_j^{1}-\dfrac{c^2\Delta t^2}{2 \Delta x^2}\left (W_{j+1}^{1}-2W_{j}^{1}+W_{j-1}^{1}\right) & = V_{0,j} + \Delta t V_{1,j} - \dfrac{c^2 \Delta t^3}{2}D_{+x}D_{-x}V_{1,j} 
+\\
+&+\dfrac{\Delta t^2}{4}\left(f_j^{1}+f_{j}^{-1}\right), \notag
+\end{align}
+where $f_j^{-1}=f(x_j,-\Delta t)$.
+Thus, we obtain the system to solve for $W_j^1$
+\begin{align}
+\begin{bmatrix}
+1 & & & & & & \\
+-r & 1+2r & -r & & & &\\
+& -r & 1+2r & -r & & & \\
+& & \ddots & \ddots & \ddots & &\\
+& & & -r & 1+2r & -r &\\
+& & & & -r & 1+2r & -r\\
+& & & & & & 1
+\end{bmatrix}\begin{bmatrix}
+W_0^{1}\\ W_1^{1}\\ W_2^{1}\\ \vdots \\ W_{N_x-2}^{1} \\W_{N_x-1}^{1} \\ W_{N_x}^{1}
+\end{bmatrix}=\begin{bmatrix}
+g_a(\Delta t) \\ R_1 \\ R_2 \\ \vdots \\ R_{N_x-2} \\ R_{N_x-1} \\ g_b(\Delta t)
+\end{bmatrix},
+\end{align}
+where
+\begin{align}
+R_j= V_{0,j} + \Delta t V_{1,j} - \dfrac{c^2 \Delta t^3}{2}D_{+x}D_{-x}V_{1,j} + \dfrac{\Delta t^2}{4}\left(f_j^{1}+f_{j}^{-1}\right), \quad j=1,\cdots, N_x-1.
+\end{align}
+Note that the matrix is the same as in the system \eqref{eq:1DWaveImplicitSystem}, and only the RHS is different. 
+
+Here are the numerical results for the implicit scheme on the domain $(a,b)=(0,1)$.
+\begin{enumerate}
+\item Polynomial manufactured solution (should be ``exact'', i.e. machine epsilon, for polynomial up to degree two).
+\begin{align*}
+w(x,t)=(b_0+b_1t+b_2t^2)(c_0+c_1x+c_2 x^2).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=poly: t=6.50e-01: m=1 Nx=  40 Nt=  29 dt=2.24e-02 maxErr=8.88e-15
+ms=poly: t=6.50e-01: m=2 Nx=  80 Nt=  58 dt=1.12e-02 maxErr=4.44e-14 ratio= 0.20 rate=-2.32
+ms=poly: t=6.50e-01: m=3 Nx= 160 Nt= 116 dt=5.60e-03 maxErr=1.57e-13 ratio= 0.28 rate=-1.82
+ms=poly: t=6.50e-01: m=4 Nx= 320 Nt= 232 dt=2.80e-03 maxErr=6.22e-13 ratio= 0.25 rate=-1.98
+ms=poly: t=6.50e-01: m=5 Nx= 640 Nt= 463 dt=1.40e-03 maxErr=9.43e-12 ratio= 0.07 rate=-3.92
+ms=poly: t=6.50e-01: m=6 Nx=1280 Nt= 925 dt=7.03e-04 maxErr=7.86e-11 ratio= 0.12 rate=-3.06
+\end{Verbatim}
+
+\item Pulse solution (exact solution, no forcing and should get second-order convergence rate).
+\begin{align*}
+w(x,t)=e^{-\beta^2(x-x_0-ct)^2}.
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=pulse: t=6.50e-01: m=1 Nx=  40 Nt=  29 dt=2.24e-02 maxErr=5.64e-01
+ms=pulse: t=6.50e-01: m=2 Nx=  80 Nt=  58 dt=1.12e-02 maxErr=4.04e-01 ratio= 1.39 rate= 0.48
+ms=pulse: t=6.50e-01: m=3 Nx= 160 Nt= 116 dt=5.60e-03 maxErr=1.65e-01 ratio= 2.46 rate= 1.30
+ms=pulse: t=6.50e-01: m=4 Nx= 320 Nt= 232 dt=2.80e-03 maxErr=4.29e-02 ratio= 3.84 rate= 1.94
+ms=pulse: t=6.50e-01: m=5 Nx= 640 Nt= 463 dt=1.40e-03 maxErr=1.06e-02 ratio= 4.05 rate= 2.02
+ms=pulse: t=6.50e-01: m=6 Nx=1280 Nt= 925 dt=7.03e-04 maxErr=2.64e-03 ratio= 4.02 rate= 2.01
+\end{Verbatim}
+
+\item Test eigenfunction (optional, exact solution)
+\begin{align*}
+w(x,t)=\cos(\lambda c t)\sin(\lambda x).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=eigen: t=6.50e-01: m=1 Nx=  40 Nt=  29 dt=2.24e-02 maxErr=2.34e-03
+ms=eigen: t=6.50e-01: m=2 Nx=  80 Nt=  58 dt=1.12e-02 maxErr=5.87e-04 ratio= 4.00 rate= 2.00
+ms=eigen: t=6.50e-01: m=3 Nx= 160 Nt= 116 dt=5.60e-03 maxErr=1.47e-04 ratio= 4.00 rate= 2.00
+ms=eigen: t=6.50e-01: m=4 Nx= 320 Nt= 232 dt=2.80e-03 maxErr=3.67e-05 ratio= 4.00 rate= 2.00
+ms=eigen: t=6.50e-01: m=5 Nx= 640 Nt= 463 dt=1.40e-03 maxErr=9.20e-06 ratio= 3.99 rate= 1.99
+ms=eigen: t=6.50e-01: m=6 Nx=1280 Nt= 925 dt=7.03e-04 maxErr=2.30e-06 ratio= 3.99 rate= 2.00
+\end{Verbatim}
+\end{enumerate}
+
+\subsection{Corresponding eigenvalue problem}
+The corresponding eigenvalue problem to the wave equation is
+\begin{subequations}
+\label{eq:1DEigenvalueProb}
+\begin{align}
+& \phi_{xx} = -\lambda^2 \phi, \quad x\in (a,b), \\
+& \phi(a) = 0, \\
+& \phi(b) = 0.
+\end{align}
+\end{subequations}
+\subsubsection{Exact eigenvalues and eigenfunctions}
+The exact eigenvalues and eigenfunctions of this problem (take $\lambda_n$ to be nonnegative) are 
+\begin{subequations}
+\begin{align}
+\lambda_n = \dfrac{n\pi}{b-a}, \quad \phi_n = \sin\left( \dfrac{n\pi(x-a)}{b-a} \right), \quad n=1,2,3,\dots
+\end{align}
+\end{subequations}
+\subsubsection{Discrete eigenvalues and eigenfunctions}
+A second-order accurate approximation using finite difference approximations to~\eqref{eq:1DEigenvalueProb} is given by
+\begin{subequations}
+\begin{align}
+& D_{+x}D_{-x}\phi_j = -\lambda^2 \phi_j, \quad j=1,2,\dots, N_x-1, \\
+& \phi_0 = 0, \quad \phi_{N_x} = 0.
+\end{align}
+\end{subequations}
+The discrete eigenvalues and eigenfunctions can be found in closed form as (note that the eigenfunctions are exact for this problem)
+\begin{subequations}
+\begin{align}
+& \lambda^{(n)}_{h} =\dfrac{2}{\Delta x} \sin\left( \dfrac{n\pi \Delta x}{2(b-a)} \right), && n=1,2,\dots,N_x-1,
+\\
+&\phi^{(n)}_{h,j} = \sin\left( \dfrac{n\pi(x_j-a)}{b-a} \right), && j=0,1,\dots ,N_x. 
+\end{align}
+\end{subequations}
+
+\section{Wave equation in two dimensions on a rectangular domain}
+Consider the two dimensional wave equation with Dirichlet boundary conditions
+\begin{subequations}
+\label{eq:2DWaveEquation}
+\begin{align}
+  &w_{tt} = c^2 \left(w_{xx}+w_{yy}\right) + f(x,y,t), && (x,y) \in (a_x,b_x)\times(a_y,b_y), \quad 0 \leq t \leq t_{\text{final}}, \\
+  &w(a_x,y,t) = g_{ax}(y,t), \quad w(b_x,y,t) = g_{bx}(y,t), && y \in [a_y,b_y], \quad 0 \leq t \leq t_{\text{final}}, \\
+  &w(x,a_y,t) = g_{ay}(x,t), \quad w(x,b_y,t) = g_{by}(x,t), && x \in [a_x,b_x], \quad 0 \leq t \leq t_{\text{final}}, \\
+  &w(x,y,0) = v_0(x,y), \quad w_t(x,y,0) = v_1(x,y), && (x,y) \in [a_x,b_x]\times[a_y,b_y].
+\end{align}
+\end{subequations}
+The grid is $x_i = a_x + i\Delta x$, $y_j = a_y + j\Delta y$, with $\Delta x = (b_x-a_x)/N_x$ and $\Delta y = (b_y-a_y)/N_y$. We write
+\begin{align}
+L_h W_{ij} = D_{+x}D_{-x}W_{ij} + D_{+y}D_{-y}W_{ij}
+\end{align}
+for the five-point approximation to the Laplacian.
+
+\subsection{Explicit scheme}
+The numerical scheme using second-order accurate finite difference approximations for the wave equation is given by
+\begin{subequations}
+\label{eq:2DWaveExplicit}
+\begin{itemize}
+    \item \textcolor{blue}{Difference equation:}
+    \begin{align}
+        D_{+t}D_{-t}W_{ij}^n &= c^2 L_h W_{ij}^n+f(x_i,y_j,t^n), \label{eq:2DWaveExplicitA}
+        \\
+        &\quad i=1,\dots,N_x-1, \quad j=1,\dots,N_y-1, \quad n=1,\dots, N_t-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Initial conditions:}
+    \begin{align}
+        & W_{ij}^0=V_{0,ij}, && i=1,\dots,N_x-1,\; j=1,\dots,N_y-1, \label{eq:2DWaveExplicitB}\\
+        & W_{ij}^1=V_{0,ij}+\Delta t V_{1,ij}+\dfrac{\Delta t^2}{2}\left[c^2 L_h V_{0,ij} + f(x_i,y_j,0)\right], \label{eq:2DWaveExplicitC}\\
+        & &&i=1,\dots,N_x-1,\; j=1,\dots,N_y-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Boundary conditions:}
+    \begin{align}
+        & W_{0j}^n=g_{ax}(y_j,t^n), \quad W_{N_x j}^n=g_{bx}(y_j,t^n), && j=0,1,\dots,N_y,\; n=0,1,\dots,N_t, \label{eq:2DWaveExplicitD}\\
+        & W_{i0}^n=g_{ay}(x_i,t^n), \quad W_{i N_y}^n=g_{by}(x_i,t^n), && i=0,1,\dots,N_x,\; n=0,1,\dots,N_t. \label{eq:2DWaveExplicitE}
+    \end{align}
+\end{itemize}
+\end{subequations}
+where $V_{0,ij}=v_0(x_i,y_j)$ and $V_{1,ij}=v_1(x_i,y_j)$. As in one dimension, the first step~\eqref{eq:2DWaveExplicitC} follows from the Taylor expansion
+\begin{align}
+w(x,y,\Delta t) = w(x,y,0)+\Delta t\, w_t(x,y,0)+\dfrac{\Delta t^2}{2}w_{tt}(x,y,0)+\mathcal{O}(\Delta t^3),
+\end{align}
+with $w_{tt}(x,y,0)=c^2\left(\partial_x^2 v_0+\partial_y^2 v_0\right)+f(x,y,0)$ from the PDE. The time step is
+\begin{align}
+\Delta t = \dfrac{\text{cfl}}{c}\left(\dfrac{1}{\Delta x^2}+\dfrac{1}{\Delta y^2}\right)^{-1/2}, \quad \text{cfl}<1.
+\end{align}
+
+Here are the numerical results on the domain $(0,1)^2$ with $c=1$, $\text{cfl}=0.9$, $t_{\text{final}}=0.65$ and $N_x=N_y=20\cdot 2^{m-1}$.
+\begin{enumerate}
+\item Polynomial manufactured solution (should be ``exact'', i.e. machine epsilon, for polynomial up to degree two).
+\begin{align*}
+w(x,y,t)=(b_0+b_1t+b_2t^2)(c_{00}+c_{10}x+c_{20}x^2+c_{11}xy+c_{01}y+c_{02}y^2).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=poly: t=6.50e-01: m=1 Nx=  20 Nt=  21 dt=3.10e-02 maxErr=1.78e-15
+ms=poly: t=6.50e-01: m=2 Nx=  40 Nt=  41 dt=1.59e-02 maxErr=2.66e-15 ratio= 0.67 rate=-0.58
+ms=poly: t=6.50e-01: m=3 Nx=  80 Nt=  82 dt=7.93e-03 maxErr=4.44e-15 ratio= 0.60 rate=-0.74
+ms=poly: t=6.50e-01: m=4 Nx= 160 Nt= 164 dt=3.96e-03 maxErr=5.77e-15 ratio= 0.77 rate=-0.38
+ms=poly: t=6.50e-01: m=5 Nx= 320 Nt= 327 dt=1.99e-03 maxErr=8.88e-15 ratio= 0.65 rate=-0.62
+\end{Verbatim}
+
+\item Trigonometric manufactured solution (second-order convergence rate), with $k_x=3\pi$, $k_y=2\pi$.
+\begin{align*}
+w(x,y,t)=\sin\left(c\sqrt{k_x^2+k_y^2}\,t\right)\sin(k_x x)\sin(k_y y).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=trig: t=6.50e-01: m=1 Nx=  20 Nt=  21 dt=3.10e-02 maxErr=1.12e-02
+ms=trig: t=6.50e-01: m=2 Nx=  40 Nt=  41 dt=1.59e-02 maxErr=3.24e-03 ratio= 3.47 rate= 1.79
+ms=trig: t=6.50e-01: m=3 Nx=  80 Nt=  82 dt=7.93e-03 maxErr=8.12e-04 ratio= 3.99 rate= 2.00
+ms=trig: t=6.50e-01: m=4 Nx= 160 Nt= 164 dt=3.96e-03 maxErr=2.03e-04 ratio= 4.00 rate= 2.00
+ms=trig: t=6.50e-01: m=5 Nx= 320 Nt= 327 dt=1.99e-03 maxErr=5.16e-05 ratio= 3.94 rate= 1.98
+\end{Verbatim}
+
+\item Test eigenfunction (exact solution, no forcing), with $n=m=2$.
+\begin{align*}
+w(x,y,t)=\cos\left(c\pi\sqrt{n^2+m^2}\,t\right)\sin(n\pi x)\sin(m\pi y).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=eigen: t=6.50e-01: m=1 Nx=  20 Nt=  21 dt=3.10e-02 maxErr=2.73e-03
+ms=eigen: t=6.50e-01: m=2 Nx=  40 Nt=  41 dt=1.59e-02 maxErr=5.66e-04 ratio= 4.82 rate= 2.27
+ms=eigen: t=6.50e-01: m=3 Nx=  80 Nt=  82 dt=7.93e-03 maxErr=1.41e-04 ratio= 4.01 rate= 2.00
+ms=eigen: t=6.50e-01: m=4 Nx= 160 Nt= 164 dt=3.96e-03 maxErr=3.53e-05 ratio= 4.00 rate= 2.00
+ms=eigen: t=6.50e-01: m=5 Nx= 320 Nt= 327 dt=1.99e-03 maxErr=8.60e-06 ratio= 4.10 rate= 2.04
+\end{Verbatim}
+\end{enumerate}
+
+\subsection{Implicit scheme}
+The implicit scheme using second-order accurate finite difference approximations is given by
+\begin{subequations}
+\label{eq:2DWaveImplicit}
+\begin{itemize}
+    \item \textcolor{blue}{Difference equation:}
+    \begin{align}
+        D_{+t}D_{-t}W_{ij}^n &= c^2 L_h\left(\dfrac{W_{ij}^{n+1}+W_{ij}^{n-1}}{2}\right) + \dfrac{f(x_i,y_j,t^{n+1})+f(x_i,y_j,t^{n-1})}{2}, \label{eq:2DWaveImplicitA}
+        \\
+        &\quad i=1,\dots,N_x-1, \quad j=1,\dots,N_y-1, \quad n=1,\dots, N_t-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Initial conditions:}
+    \begin{align}
+        & W_{ij}^0 = V_{0,ij}, && i=1,\dots,N_x-1,\; j=1,\dots,N_y-1, \label{eq:2DWaveImplicitB}\\
+        & D_{0t}W_{ij}^0  = V_{1,ij}, && i=1,\dots,N_x-1,\; j=1,\dots,N_y-1. \label{eq:2DWaveImplicitC}
+    \end{align}
+
+    \item \textcolor{blue}{Boundary conditions:}
+    \begin{align}
+        & W_{0j}^n=g_{ax}(y_j,t^n), \quad W_{N_x j}^n=g_{bx}(y_j,t^n), && j=0,1,\dots,N_y,\; n=0,1,\dots,N_t, \label{eq:2DWaveImplicitD}\\
+        & W_{i0}^n=g_{ay}(x_i,t^n), \quad W_{i N_y}^n=g_{by}(x_i,t^n), && i=0,1,\dots,N_x,\; n=0,1,\dots,N_t. \label{eq:2DWaveImplicitE}
+    \end{align}
+\end{itemize}
+\end{subequations}
+
+As in one dimension, the difference equation~\eqref{eq:2DWaveImplicitA} can be written as
+\begin{align}
+-r_xW_{i-1,j}^{n+1}-r_xW_{i+1,j}^{n+1}+(1+2r_x+2r_y)W_{ij}^{n+1}-r_yW_{i,j-1}^{n+1}-r_yW_{i,j+1}^{n+1}=G_{ij}^n,
+\end{align}
+for $i=1,\dots,N_x-1$, $j=1,\dots,N_y-1$, where
+\begin{align*}
+r_x=\dfrac{c^2\Delta t^2}{2\Delta x^2},\quad r_y=\dfrac{c^2\Delta t^2}{2\Delta y^2},\quad G_{ij}^n=2W_{ij}^n-W_{ij}^{n-1}+\dfrac{c^2\Delta t^2}{2} L_hW_{ij}^{n-1}+\dfrac{\Delta t^2}{2}\left[f_{ij}^{n+1}+f_{ij}^{n-1}\right].
+\end{align*}
+Combining with the boundary conditions (identity rows, $G^n = g(t^{n+1})$ at boundary points), we obtain a system
+\begin{align}
+\label{eq:2DWaveImplicitSystem}
+A\,\mathbf{W}^{n+1} = \mathbf{G}^{n}, \qquad A = I - \dfrac{c^2\Delta t^2}{2}L_h \;\text{ on interior rows}, \qquad A = I \;\text{ on boundary rows},
+\end{align}
+where $\mathbf{W}^{n+1}$ holds all $(N_x+1)(N_y+1)$ grid values. With the ordering $W_{ij}\mapsto i+(N_x+1)j$, the interior part of $L_h$ is $I_y\otimes D_{xx} + D_{yy}\otimes I_x$, so $A$ is block tridiagonal; it is factorized once and reused at every time step.
+
+For the first time step, $D_{0t}W_{ij}^0=V_{1,ij}$ gives $W_{ij}^{-1}=W_{ij}^1-2\Delta t V_{1,ij}$, and the difference equation at $n=0$ becomes
+\begin{align}
+A\,\mathbf{W}^{1} = \mathbf{R}, \qquad R_{ij}= V_{0,ij} + \Delta t V_{1,ij} - \dfrac{c^2 \Delta t^3}{2}L_hV_{1,ij} + \dfrac{\Delta t^2}{4}\left(f_{ij}^{1}+f_{ij}^{-1}\right),
+\end{align}
+with $R=g(\Delta t)$ at boundary points and $f_{ij}^{-1}=f(x_i,y_j,-\Delta t)$. The matrix is the same as in~\eqref{eq:2DWaveImplicitSystem}.
+
+Here are the numerical results for the implicit scheme (same grids and time steps as the explicit scheme).
+\begin{enumerate}
+\item Polynomial manufactured solution.
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=poly: t=6.50e-01: m=1 Nx=  20 Nt=  21 dt=3.10e-02 maxErr=3.11e-15
+ms=poly: t=6.50e-01: m=2 Nx=  40 Nt=  41 dt=1.59e-02 maxErr=6.22e-15 ratio= 0.50 rate=-1.00
+ms=poly: t=6.50e-01: m=3 Nx=  80 Nt=  82 dt=7.93e-03 maxErr=1.15e-14 ratio= 0.54 rate=-0.89
+ms=poly: t=6.50e-01: m=4 Nx= 160 Nt= 164 dt=3.96e-03 maxErr=2.58e-14 ratio= 0.45 rate=-1.16
+ms=poly: t=6.50e-01: m=5 Nx= 320 Nt= 327 dt=1.99e-03 maxErr=5.42e-14 ratio= 0.48 rate=-1.07
+\end{Verbatim}
+
+\item Trigonometric manufactured solution.
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=trig: t=6.50e-01: m=1 Nx=  20 Nt=  21 dt=3.10e-02 maxErr=9.36e-02
+ms=trig: t=6.50e-01: m=2 Nx=  40 Nt=  41 dt=1.59e-02 maxErr=1.95e-02 ratio= 4.81 rate= 2.27
+ms=trig: t=6.50e-01: m=3 Nx=  80 Nt=  82 dt=7.93e-03 maxErr=4.53e-03 ratio= 4.30 rate= 2.10
+ms=trig: t=6.50e-01: m=4 Nx= 160 Nt= 164 dt=3.96e-03 maxErr=1.11e-03 ratio= 4.08 rate= 2.03
+ms=trig: t=6.50e-01: m=5 Nx= 320 Nt= 327 dt=1.99e-03 maxErr=2.77e-04 ratio= 4.00 rate= 2.00
+\end{Verbatim}
+
+\item Test eigenfunction.
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=eigen: t=6.50e-01: m=1 Nx=  20 Nt=  21 dt=3.10e-02 maxErr=5.95e-02
+ms=eigen: t=6.50e-01: m=2 Nx=  40 Nt=  41 dt=1.59e-02 maxErr=1.48e-02 ratio= 4.03 rate= 2.01
+ms=eigen: t=6.50e-01: m=3 Nx=  80 Nt=  82 dt=7.93e-03 maxErr=3.64e-03 ratio= 4.06 rate= 2.02
+ms=eigen: t=6.50e-01: m=4 Nx= 160 Nt= 164 dt=3.96e-03 maxErr=9.07e-04 ratio= 4.01 rate= 2.01
+ms=eigen: t=6.50e-01: m=5 Nx= 320 Nt= 327 dt=1.99e-03 maxErr=2.28e-04 ratio= 3.98 rate= 1.99
+\end{Verbatim}
+\end{enumerate}
+
+\subsection{Corresponding eigenvalue problem}
+The corresponding eigenvalue problem to the wave equation is
+\begin{subequations}
+\label{eq:2DEigenvalueProb}
+\begin{align}
+& \phi_{xx}+\phi_{yy} = -\lambda^2 \phi, && (x,y)\in (a_x,b_x)\times(a_y,b_y), \\
+& \phi = 0, && (x,y)\in \partial\left((a_x,b_x)\times(a_y,b_y)\right).
+\end{align}
+\end{subequations}
+\subsubsection{Exact eigenvalues and eigenfunctions}
+By separation of variables, the exact eigenvalues and eigenfunctions are (with $L_x=b_x-a_x$, $L_y=b_y-a_y$)
+\begin{subequations}
+\begin{align}
+\lambda_{nm} = \pi\sqrt{\left(\dfrac{n}{L_x}\right)^2+\left(\dfrac{m}{L_y}\right)^2}, \quad \phi_{nm} = \sin\left( \dfrac{n\pi(x-a_x)}{L_x} \right)\sin\left( \dfrac{m\pi(y-a_y)}{L_y} \right), \quad n,m=1,2,3,\dots
+\end{align}
+\end{subequations}
+On the unit square, $\lambda_{nm}=\lambda_{mn}$, so the eigenvalues with $n\neq m$ are double.
+\subsubsection{Discrete eigenvalues and eigenfunctions}
+A second-order accurate approximation using finite difference approximations to~\eqref{eq:2DEigenvalueProb} is given by
+\begin{subequations}
+\begin{align}
+& D_{+x}D_{-x}\phi_{ij}+D_{+y}D_{-y}\phi_{ij} = -\lambda^2 \phi_{ij}, && i=1,\dots,N_x-1,\; j=1,\dots,N_y-1, \\
+& \phi_{0j} = \phi_{N_x j} = 0, && j=0,1,\dots,N_y,\\
+& \phi_{i0} = \phi_{i N_y} = 0, && i=0,1,\dots,N_x.
+\end{align}
+\end{subequations}
+The discrete eigenvalues and eigenfunctions are products of the one dimensional ones (the eigenfunctions are again exact at the grid points)
+\begin{subequations}
+\begin{align}
+& \left(\lambda^{(n,m)}_{h}\right)^2 =\dfrac{4}{\Delta x^2} \sin^2\left( \dfrac{n\pi \Delta x}{2L_x} \right)+\dfrac{4}{\Delta y^2} \sin^2\left( \dfrac{m\pi \Delta y}{2L_y} \right), && n=1,\dots,N_x-1,\; m=1,\dots,N_y-1,
+\\
+&\phi^{(n,m)}_{h,ij} = \sin\left( \dfrac{n\pi(x_i-a_x)}{L_x} \right)\sin\left( \dfrac{m\pi(y_j-a_y)}{L_y} \right), && i=0,\dots,N_x,\; j=0,\dots,N_y.
+\end{align}
+\end{subequations}
+
+
+\section{Wave equation in two dimensions on the annulus}
+Consider the wave equation on the annulus
+\begin{align}
+D=\left\{(x,y)\in \mathbb{R}^2 \;:\; a^2<x^2+y^2<b^2 \right\}, \qquad 0<a<b.
+\end{align}
+In polar coordinates $x=r\cos\theta$, $y=r\sin\theta$, the problem is
+\begin{subequations}
+\label{eq:AnnulusWaveEquation}
+\begin{align}
+&w_{tt}=c^2\left(w_{rr}+\dfrac{1}{r}w_r+\dfrac{1}{r^2}w_{\theta\theta}\right)+f(r,\theta,t), && (r,\theta)\in(a,b)\times [0,2\pi),\;\; 0\leq t\leq t_{\text{final}},\\
+&w(a,\theta,t)=g_a(\theta,t), \quad w(b,\theta,t)=g_b(\theta,t), && \theta\in[0,2\pi],\;\; 0\leq t\leq t_{\text{final}},\\
+&w(r,\theta+2\pi,t)=w(r,\theta,t), && (r,\theta)\in[a,b]\times [0,2\pi],\;\; 0\leq t\leq t_{\text{final}},\\
+&w(r,\theta,0)=v_0(r,\theta), \quad w_t(r,\theta,0)=v_1(r,\theta), && (r,\theta)\in[a,b]\times [0,2\pi].
+\end{align}
+\end{subequations}
+The grid is $r_i = a + i\Delta r$, $i=0,\dots,N_r$, and $\theta_j = j\Delta\theta$, $j=-1,0,\dots,N_\theta$, with $\Delta r=(b-a)/N_r$ and $\Delta\theta = 2\pi/N_\theta$. The points $j=-1$ (ghost) and $j=N_\theta$ ($\theta=2\pi$) are periodic copies of $j=N_\theta-1$ and $j=0$. We write
+\begin{align}
+L_h W_{ij} = D_{+r}D_{-r}W_{ij}+\dfrac{1}{r_i}D_{0r}W_{ij}+\dfrac{1}{r_i^2}D_{+\theta}D_{-\theta}W_{ij}
+\end{align}
+for the approximation to the Laplacian in polar coordinates, where
+\begin{align*}
+D_{0r}W_{ij}=\dfrac{W_{i+1,j}-W_{i-1,j}}{2\Delta r}.
+\end{align*}
+
+\subsection{Explicit scheme}
+The numerical scheme using second-order accurate finite difference approximations for the wave equation is given by
+\begin{subequations}
+\label{eq:AnnulusWaveExplicit}
+\begin{itemize}
+    \item \textcolor{blue}{Difference equation:}
+    \begin{align}
+        D_{+t}D_{-t}W_{ij}^n &= c^2 L_h W_{ij}^n+f(r_i,\theta_j,t^n), \label{eq:AnnulusWaveExplicitA}
+        \\
+        &\quad i=1,\dots,N_r-1, \quad j=0,\dots,N_\theta-1, \quad n=1,\dots, N_t-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Initial conditions:}
+    \begin{align}
+        & W_{ij}^0=V_{0,ij}, && i=1,\dots,N_r-1,\; j=0,\dots,N_\theta-1, \label{eq:AnnulusWaveExplicitB}\\
+        & W_{ij}^1=V_{0,ij}+\Delta t V_{1,ij}+\dfrac{\Delta t^2}{2}\left[c^2 L_h V_{0,ij} + f(r_i,\theta_j,0)\right], \label{eq:AnnulusWaveExplicitC}\\
+        & &&i=1,\dots,N_r-1,\; j=0,\dots,N_\theta-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Boundary conditions:}
+    \begin{align}
+        & W_{0j}^n=g_a(\theta_j,t^n), \quad W_{N_r j}^n=g_b(\theta_j,t^n), && j=-1,0,\dots,N_\theta,\; n=0,1,\dots,N_t, \label{eq:AnnulusWaveExplicitD}\\
+        & W_{i,-1}^n=W_{i,N_\theta-1}^n, \quad W_{i,N_\theta}^n=W_{i,0}^n, && i=0,1,\dots,N_r,\; n=0,1,\dots,N_t. \label{eq:AnnulusWaveExplicitE}
+    \end{align}
+\end{itemize}
+\end{subequations}
+The first step~\eqref{eq:AnnulusWaveExplicitC} is derived as in one dimension. The smallest grid spacing in $\theta$ is $a\Delta\theta$ (at the inner boundary), so the time step is
+\begin{align}
+\Delta t = \dfrac{\text{cfl}}{c}\left(\dfrac{1}{\Delta r^2}+\dfrac{1}{(a\Delta\theta)^2}\right)^{-1/2}, \quad \text{cfl}<1.
+\end{align}
+Using $\Delta\theta$ instead of $a\Delta\theta$ overestimates the stable time step: with $a=0.5$ and $\text{cfl}=0.9$ the effective CFL number is above one and the explicit scheme is unstable on fine grids.
+
+Here are the numerical results on the annulus $a=0.5$, $b=2$ with $c=1$, $\text{cfl}=0.9$, $t_{\text{final}}=0.65$, $N_r=5\cdot 2^m$ and $N_\theta=2N_r$.
+\begin{enumerate}
+\item Polynomial manufactured solution (second order: the polar stencil is not exact for polynomials in $x,y$).
+\begin{align*}
+w(x,y,t)=(b_0+b_1t+b_2t^2)(c_{00}+c_{10}x+c_{20}x^2+c_{11}xy+c_{01}y+c_{02}y^2).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=poly: t=6.50e-01: m=1 Nr=  10 Nth=  20 Nt=   7 dt=9.29e-02 maxErr=5.08e-03
+ms=poly: t=6.50e-01: m=2 Nr=  20 Nth=  40 Nt=  14 dt=4.64e-02 maxErr=1.29e-03 ratio= 3.95
+ms=poly: t=6.50e-01: m=3 Nr=  40 Nth=  80 Nt=  27 dt=2.41e-02 maxErr=3.23e-04 ratio= 3.99
+ms=poly: t=6.50e-01: m=4 Nr=  80 Nth= 160 Nt=  54 dt=1.20e-02 maxErr=8.09e-05 ratio= 3.99
+ms=poly: t=6.50e-01: m=5 Nr= 160 Nth= 320 Nt= 107 dt=6.07e-03 maxErr=2.02e-05 ratio= 4.00
+\end{Verbatim}
+
+\item Trigonometric manufactured solution, with $k_x=k_y=\pi$.
+\begin{align*}
+w(x,y,t)=\sin\left(c\sqrt{k_x^2+k_y^2}\,t\right)\sin(k_x x)\sin(k_y y).
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=trig: t=6.50e-01: m=1 Nr=  10 Nth=  20 Nt=   7 dt=9.29e-02 maxErr=2.11e-01
+ms=trig: t=6.50e-01: m=2 Nr=  20 Nth=  40 Nt=  14 dt=4.64e-02 maxErr=6.20e-02 ratio= 3.40
+ms=trig: t=6.50e-01: m=3 Nr=  40 Nth=  80 Nt=  27 dt=2.41e-02 maxErr=1.48e-02 ratio= 4.20
+ms=trig: t=6.50e-01: m=4 Nr=  80 Nth= 160 Nt=  54 dt=1.20e-02 maxErr=3.64e-03 ratio= 4.06
+ms=trig: t=6.50e-01: m=5 Nr= 160 Nth= 320 Nt= 107 dt=6.07e-03 maxErr=9.06e-04 ratio= 4.02
+\end{Verbatim}
+
+\item Test eigenfunction (exact solution, no forcing), with $k=1$ and $\lambda=\lambda_{1,1}\approx 2.2217160734$ (see Section~\ref{sec:AnnulusExactEigen}).
+\begin{align*}
+w(r,\theta,t)=\cos(\lambda c t)\left[J_1(\lambda r)-\dfrac{J_1(\lambda a)}{Y_1(\lambda a)}Y_1(\lambda r)\right]\cos\theta.
+\end{align*}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=eigen: t=6.50e-01: m=1 Nr=  10 Nth=  20 Nt=   7 dt=9.29e-02 maxErr=1.73e-03
+ms=eigen: t=6.50e-01: m=2 Nr=  20 Nth=  40 Nt=  14 dt=4.64e-02 maxErr=4.35e-04 ratio= 3.99
+ms=eigen: t=6.50e-01: m=3 Nr=  40 Nth=  80 Nt=  27 dt=2.41e-02 maxErr=1.02e-04 ratio= 4.24
+ms=eigen: t=6.50e-01: m=4 Nr=  80 Nth= 160 Nt=  54 dt=1.20e-02 maxErr=2.56e-05 ratio= 3.99
+ms=eigen: t=6.50e-01: m=5 Nr= 160 Nth= 320 Nt= 107 dt=6.07e-03 maxErr=6.31e-06 ratio= 4.07
+\end{Verbatim}
+\end{enumerate}
+
+\subsection{Implicit scheme}
+The implicit scheme using second-order accurate finite difference approximations is given by
+\begin{subequations}
+\label{eq:AnnulusWaveImplicit}
+\begin{itemize}
+    \item \textcolor{blue}{Difference equation:}
+    \begin{align}
+        D_{+t}D_{-t}W_{ij}^n &= c^2 L_h\left(\dfrac{W_{ij}^{n+1}+W_{ij}^{n-1}}{2}\right) + \dfrac{f(r_i,\theta_j,t^{n+1})+f(r_i,\theta_j,t^{n-1})}{2}, \label{eq:AnnulusWaveImplicitA}
+        \\
+        &\quad i=1,\dots,N_r-1, \quad j=0,\dots,N_\theta-1, \quad n=1,\dots, N_t-1. \notag
+    \end{align}
+
+    \item \textcolor{blue}{Initial conditions:}
+    \begin{align}
+        & W_{ij}^0 = V_{0,ij}, && i=1,\dots,N_r-1,\; j=0,\dots,N_\theta-1, \label{eq:AnnulusWaveImplicitB}\\
+        & D_{0t}W_{ij}^0  = V_{1,ij}, && i=1,\dots,N_r-1,\; j=0,\dots,N_\theta-1. \label{eq:AnnulusWaveImplicitC}
+    \end{align}
+
+    \item \textcolor{blue}{Boundary conditions:}
+    \begin{align}
+        & W_{0j}^n=g_a(\theta_j,t^n), \quad W_{N_r j}^n=g_b(\theta_j,t^n), && j=-1,0,\dots,N_\theta,\; n=0,1,\dots,N_t, \label{eq:AnnulusWaveImplicitD}\\
+        & W_{i,-1}^n=W_{i,N_\theta-1}^n, \quad W_{i,N_\theta}^n=W_{i,0}^n, && i=0,1,\dots,N_r,\; n=0,1,\dots,N_t. \label{eq:AnnulusWaveImplicitE}
+    \end{align}
+\end{itemize}
+\end{subequations}
+
+Writing out $L_h$, the difference equation~\eqref{eq:AnnulusWaveImplicitA} becomes
+\begin{align}
+&-\left(s-\dfrac{q}{r_i}\right)W_{i-1,j}^{n+1}-\left(s+\dfrac{q}{r_i}\right)W_{i+1,j}^{n+1}+\left(1+2s+\dfrac{2p}{r_i^2}\right)W_{ij}^{n+1} \notag\\
+&\quad -\dfrac{p}{r_i^2}\left(W_{i,j-1}^{n+1}+W_{i,j+1}^{n+1}\right)=G_{ij}^n,
+\end{align}
+for $i=1,\dots,N_r-1$, $j=0,\dots,N_\theta-1$, where
+\begin{align*}
+&s=\dfrac{c^2\Delta t^2}{2\Delta r^2},\quad p=\dfrac{c^2\Delta t^2}{2\Delta \theta^2},\quad q=\dfrac{c^2\Delta t^2}{4\Delta r},\\
+&G_{ij}^n=2W_{ij}^n-W_{ij}^{n-1}+\dfrac{c^2\Delta t^2}{2} L_hW_{ij}^{n-1}+\dfrac{\Delta t^2}{2}\left[f_{ij}^{n+1}+f_{ij}^{n-1}\right].
+\end{align*}
+Combining with the boundary conditions, we obtain a system
+\begin{align}
+\label{eq:AnnulusWaveImplicitSystem}
+A\,\mathbf{W}^{n+1} = \mathbf{G}^{n},
+\end{align}
+where $\mathbf{W}^{n+1}$ holds all grid values $i=0,\dots,N_r$, $j=-1,\dots,N_\theta$, and the rows of $A$ are
+\begin{itemize}
+\item interior points: $A = I - \dfrac{c^2\Delta t^2}{2}L_h$ (the equation above),
+\item boundary points $r=a$, $r=b$: identity rows, with $G_{0j}^n=g_a(\theta_j,t^{n+1})$, $G_{N_r j}^n=g_b(\theta_j,t^{n+1})$,
+\item periodic points: $W_{i,-1}^{n+1}-W_{i,N_\theta-1}^{n+1}=0$ and $W_{i,N_\theta}^{n+1}-W_{i,0}^{n+1}=0$, with $G=0$.
+\end{itemize}
+The matrix is factorized once and reused at every time step. For the first time step, $D_{0t}W_{ij}^0=V_{1,ij}$ gives $W_{ij}^{-1}=W_{ij}^1-2\Delta t V_{1,ij}$, and as in one dimension
+\begin{align}
+A\,\mathbf{W}^{1} = \mathbf{R}, \qquad R_{ij}= V_{0,ij} + \Delta t V_{1,ij} - \dfrac{c^2 \Delta t^3}{2}L_hV_{1,ij} + \dfrac{\Delta t^2}{4}\left(f_{ij}^{1}+f_{ij}^{-1}\right),
+\end{align}
+with $f_{ij}^{-1}=f(r_i,\theta_j,-\Delta t)$ and the same boundary and periodic rows as in~\eqref{eq:AnnulusWaveImplicitSystem}.
+
+Here are the numerical results for the implicit scheme (same grids and time steps as the explicit scheme).
+\begin{enumerate}
+\item Polynomial manufactured solution.
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=poly: t=6.50e-01: m=1 Nr=  10 Nth=  20 Nt=   7 dt=9.29e-02 maxErr=5.01e-03
+ms=poly: t=6.50e-01: m=2 Nr=  20 Nth=  40 Nt=  14 dt=4.64e-02 maxErr=1.28e-03 ratio= 3.91
+ms=poly: t=6.50e-01: m=3 Nr=  40 Nth=  80 Nt=  27 dt=2.41e-02 maxErr=3.22e-04 ratio= 3.98
+ms=poly: t=6.50e-01: m=4 Nr=  80 Nth= 160 Nt=  54 dt=1.20e-02 maxErr=8.08e-05 ratio= 3.99
+ms=poly: t=6.50e-01: m=5 Nr= 160 Nth= 320 Nt= 107 dt=6.07e-03 maxErr=2.02e-05 ratio= 4.00
+\end{Verbatim}
+
+\item Trigonometric manufactured solution.
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=trig: t=6.50e-01: m=1 Nr=  10 Nth=  20 Nt=   7 dt=9.29e-02 maxErr=3.19e-01
+ms=trig: t=6.50e-01: m=2 Nr=  20 Nth=  40 Nt=  14 dt=4.64e-02 maxErr=8.26e-02 ratio= 3.87
+ms=trig: t=6.50e-01: m=3 Nr=  40 Nth=  80 Nt=  27 dt=2.41e-02 maxErr=2.13e-02 ratio= 3.88
+ms=trig: t=6.50e-01: m=4 Nr=  80 Nth= 160 Nt=  54 dt=1.20e-02 maxErr=5.39e-03 ratio= 3.95
+ms=trig: t=6.50e-01: m=5 Nr= 160 Nth= 320 Nt= 107 dt=6.07e-03 maxErr=1.36e-03 ratio= 3.97
+\end{Verbatim}
+
+\item Test eigenfunction.
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+ms=eigen: t=6.50e-01: m=1 Nr=  10 Nth=  20 Nt=   7 dt=9.29e-02 maxErr=1.03e-02
+ms=eigen: t=6.50e-01: m=2 Nr=  20 Nth=  40 Nt=  14 dt=4.64e-02 maxErr=2.61e-03 ratio= 3.95
+ms=eigen: t=6.50e-01: m=3 Nr=  40 Nth=  80 Nt=  27 dt=2.41e-02 maxErr=6.90e-04 ratio= 3.78
+ms=eigen: t=6.50e-01: m=4 Nr=  80 Nth= 160 Nt=  54 dt=1.20e-02 maxErr=1.73e-04 ratio= 3.99
+ms=eigen: t=6.50e-01: m=5 Nr= 160 Nth= 320 Nt= 107 dt=6.07e-03 maxErr=4.38e-05 ratio= 3.94
+\end{Verbatim}
+\end{enumerate}
+
+\subsection{Corresponding eigenvalue problem}
+The corresponding eigenvalue problem to the wave equation is
+\begin{subequations}
+\label{eq:AnnulusEigenvalueProb}
+\begin{align}
+&\phi_{rr}+\dfrac{1}{r}\phi_r+\dfrac{1}{r^2}\phi_{\theta\theta}=-\lambda^2 \phi, && (r,\theta)\in (a,b)\times [0,2\pi),\\
+&\phi(a,\theta)=0, \quad \phi(b,\theta)=0, && \theta \in [0,2\pi],\\
+&\phi(r,\theta+2\pi)=\phi(r,\theta), && (r,\theta)\in [a,b]\times [0,2\pi].
+\end{align}
+\end{subequations}
+\subsubsection{Exact eigenvalues and eigenfunctions}
+\label{sec:AnnulusExactEigen}
+Separation of variables $\phi(r,\theta)=R(r)\Theta(\theta)$ with $\Theta=\cos(k\theta)$ or $\sin(k\theta)$, $k=0,1,2,\dots$, gives Bessel's equation
+\begin{align}
+R''+\dfrac{1}{r}R'+\left(\lambda^2-\dfrac{k^2}{r^2}\right)R=0, \quad R(a)=R(b)=0.
+\end{align}
+The exact eigenvalues and eigenfunctions are
+\begin{subequations}
+\begin{align}
+&\phi_{k,l}(r,\theta) = \left[J_k(\lambda_{k,l} r)-\dfrac{J_k(\lambda_{k,l} a)}{Y_k(\lambda_{k,l} a)}Y_k(\lambda_{k,l} r)\right]\begin{Bmatrix}\cos(k\theta)\\ \sin(k\theta)\end{Bmatrix}, \quad k=0,1,2,\dots,\; l=1,2,3,\dots,
+\end{align}
+\end{subequations}
+where $\lambda_{k,l}$ is the $l$-th positive root of
+\begin{align}
+J_k(\lambda a)Y_k(\lambda b)-J_k(\lambda b)Y_k(\lambda a)=0,
+\end{align}
+and $J_k$, $Y_k$ are the Bessel functions of the first and second kind. For $k\geq 1$ each eigenvalue is double ($\cos k\theta$ and $\sin k\theta$). For $a=0.5$, $b=2$, $\lambda_{1,1}\approx 2.2217160734$.
+
+\subsubsection{Discrete eigenvalues and eigenfunctions}
+A second-order accurate approximation using finite difference approximations to~\eqref{eq:AnnulusEigenvalueProb} is given by
+\begin{subequations}
+\label{eq:AnnulusDiscreteEigenvalueProb}
+\begin{align}
+& D_{+r}D_{-r}\phi_{ij}+\dfrac{1}{r_i}D_{0r}\phi_{ij}+\dfrac{1}{r_i^2}D_{+\theta}D_{-\theta}\phi_{ij}=-\lambda^2 \phi_{ij}, && i=1,\dots,N_r-1,\; j=0,\dots,N_\theta-1, \label{eq:AnnulusDiscreteEigenvalueProbA}\\
+& \phi_{0j}=0,\quad \phi_{N_r j}=0, && j=-1,0,\dots,N_\theta, \label{eq:AnnulusDiscreteEigenvalueProbB}\\
+& \phi_{i,-1}=\phi_{i,N_\theta-1},\quad \phi_{i,N_\theta}=\phi_{i,0}, && i=0,1,\dots,N_r. \label{eq:AnnulusDiscreteEigenvalueProbC}
+\end{align}
+\end{subequations}
+Written out, equation~\eqref{eq:AnnulusDiscreteEigenvalueProbA} is
+\begin{align*}
+&\left[\dfrac{1}{\Delta r^2}-\dfrac{1}{2r_i\Delta r}\right]\phi_{i-1,j}+\left[\dfrac{-2}{\Delta r^2}+\dfrac{-2}{r_i^2\Delta \theta^2}\right]\phi_{ij}\\
+&\quad+\left[\dfrac{1}{\Delta r^2}+\dfrac{1}{2r_i\Delta r}\right]\phi_{i+1,j}+\dfrac{1}{r_i^2 \Delta\theta^2}\left(\phi_{i,j-1}+\phi_{i,j+1}\right)=-\lambda^2\phi_{ij}.
+\end{align*}
+By the periodic conditions~\eqref{eq:AnnulusDiscreteEigenvalueProbC}, the $\theta$-neighbours are $\phi_{i,N_\theta-1}$ and $\phi_{i,1}$ for $j=0$, and $\phi_{i,N_\theta-2}$ and $\phi_{i,0}$ for $j=N_\theta-1$.
+
+The discrete problem also separates. Since
+\begin{align}
+D_{+\theta}D_{-\theta}\, e^{ik\theta_j} = -\mu_k\, e^{ik\theta_j}, \qquad \mu_k=\dfrac{4}{\Delta\theta^2}\sin^2\left(\dfrac{k\Delta\theta}{2}\right)=\dfrac{4}{\Delta\theta^2}\sin^2\left(\dfrac{\pi k}{N_\theta}\right), \quad k=0,1,\dots,N_\theta-1,
+\end{align}
+the eigenfunctions are $\phi_{ij}=R_i\cos(k\theta_j)$ or $R_i\sin(k\theta_j)$, where $(\lambda^2, R)$ is an eigenpair of the $(N_r-1)\times(N_r-1)$ tridiagonal problem
+\begin{align}
+D_{+r}D_{-r}R_i+\dfrac{1}{r_i}D_{0r}R_i-\dfrac{\mu_k}{r_i^2}R_i=-\lambda^2 R_i, \quad i=1,\dots,N_r-1, \qquad R_0=R_{N_r}=0.
+\end{align}
+This gives all $(N_r-1)N_\theta$ discrete eigenvalues $\lambda_h$ from $N_\theta$ small problems (used in \texttt{setupAnnulus.m}). Since $\mu_k=\mu_{N_\theta-k}$, the discrete eigenvalues with $k\neq 0, N_\theta/2$ are double, as for the continuous problem.
+
+\subsection{Discrete inner product on the annulus}
+The continuous inner product on the annulus is
+\begin{align*}
+(u,v)_{L^2}=\iint_D u(x,y)\,v(x,y)\;dx\,dy=\int_{0}^{2\pi}\int_a^b u(r\cos \theta,r\sin \theta)\,v(r\cos \theta,r\sin\theta)\;r\, dr\, d\theta.
+\end{align*}
+Applying the composite trapezoidal rule in $r$ and $\theta$ gives the discrete inner product
+\begin{align*}
+(u,v)_{h}=\sum_{i=0}^{N_r}\sum_{j=0}^{N_\theta} \delta_{ij}\,U_{ij}V_{ij}\, r_i \,\Delta r\,\Delta \theta,
+\end{align*}
+where $U_{ij}=u(r_i\cos\theta_j,r_i\sin\theta_j)$, $V_{ij}=v(r_i\cos\theta_j,r_i\sin\theta_j)$, and
+\begin{align*}
+\delta_{ij}=\begin{cases}
+1/4, & i\in\{0,N_r\} \text{ and } j\in\{0,N_\theta\},\\
+1/2, & i\in\{0,N_r\} \text{ and } 1\leq j\leq N_\theta-1, \quad \text{or} \quad j\in\{0,N_\theta\} \text{ and } 1\leq i\leq N_r-1,\\
+1, & 1\leq i\leq N_r-1 \text{ and } 1\leq j\leq N_\theta-1.
+\end{cases}
+\end{align*}
+The ghost points $j=-1$ are not included.
+
+Here are the numerical results for $a=0.5$, $b=2$ (\texttt{innerProduct.m}).
+\begin{enumerate}
+\item $u(x,y)=1$, $v(x,y)=1$. Then $(u,v)_{L^2} = \pi (b^2-a^2) = 11.7809724510$. The trapezoidal rule is exact here (the integrand $r$ is linear in $r$ and the $\theta$-direction is periodic).
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+Nr=  10 Nth=  20 Com=11.7809724510 True=11.7809724510 Err=3.55e-15
+Nr=  20 Nth=  40 Com=11.7809724510 True=11.7809724510 Err=8.88e-15
+Nr=  40 Nth=  80 Com=11.7809724510 True=11.7809724510 Err=3.55e-14
+Nr=  80 Nth= 160 Com=11.7809724510 True=11.7809724510 Err=2.84e-14
+Nr= 160 Nth= 320 Com=11.7809724510 True=11.7809724510 Err=7.11e-15
+Nr= 320 Nth= 640 Com=11.7809724510 True=11.7809724510 Err=0.00e+00
+\end{Verbatim}
+\item $u(x,y)=2x+y$, $v(x,y)=xy^2$. Then $(u,v)_{L^2} = \dfrac{\pi}{12}(b^6-a^6) = 16.7510702037$ (second-order convergence).
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+Nr=  10 Nth=  20 Com=16.9855207594 True=16.7510702037 Err=2.34e-01
+Nr=  20 Nth=  40 Com=16.8097294373 True=16.7510702037 Err=5.87e-02 ratio= 4.00
+Nr=  40 Nth=  80 Com=16.7657379243 True=16.7510702037 Err=1.47e-02 ratio= 4.00
+Nr=  80 Nth= 160 Com=16.7547373159 True=16.7510702037 Err=3.67e-03 ratio= 4.00
+Nr= 160 Nth= 320 Com=16.7519869931 True=16.7510702037 Err=9.17e-04 ratio= 4.00
+Nr= 320 Nth= 640 Com=16.7512994018 True=16.7510702037 Err=2.29e-04 ratio= 4.00
+\end{Verbatim}
+\end{enumerate}
+
+\end{document}

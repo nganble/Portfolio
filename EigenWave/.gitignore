@@ -1,1 +1,13 @@
+# MATLAB autosave
 *.asv
+
+# macOS
+.DS_Store
+
+# LaTeX build files (docs/)
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
