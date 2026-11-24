@@ -12,7 +12,7 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters
-geometry = 'Annulus';                    % '1D' | '2D' | 'Annulus'
+geometry = '1D';                    % '1D' | '2D' | 'Annulus'
 
 opts.c        = 1;                  % wave speed
 opts.cfl      = 0.9;                % CFL number
@@ -44,8 +44,8 @@ switch geometry
 end
 nM = numel(mList);
 
-doPlot       = true;
-saveBaseline = true;               % true -> reference/waveSolverBaseline[_2D].mat
+doPlot       = false;
+saveBaseline = false;               % true -> reference/waveSolverBaseline[_2D].mat
 
 %% 3. Convergence study
 results = struct();

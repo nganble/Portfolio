@@ -8,12 +8,12 @@ clc; clear; close all;
 addpath(genpath(fileparts(mfilename('fullpath'))));
 
 %% 2. Parameters  (same values as the reference runs)
-geometry   = '2D';                   % '1D' | '2D' | 'Annulus'
+geometry   = '1D';                   % '1D' | '2D' | 'Annulus'
 methodName = 'eigs';                 % 'eigs' | 'Power' | 'Arnoldi'
 m = 2;   Np = 1;  numRequest = 16;
 opts.omega = 10;  opts.T = Np*2*pi/opts.omega;
 opts.c = 1;  opts.cfl = 0.6;
-opts.scheme = 'Implicit';            % 'Explicit' | 'Implicit'
+opts.scheme = 'Explicit';            % 'Explicit' | 'Implicit'
 opts.mode = 'EigenWave';  opts.geometry = geometry;
 
 
@@ -92,17 +92,23 @@ else
     numPoints = 3*round(opts.omega/pi)+1;
 end
 
-meshPoint = linspace(0, 2 * pi*numPoints, numPoints*50+1);
-
+if (strcmp(opts.scheme,'Explicit'))
+    meshPoint = linspace(0, 1.5*pi*numPoints, numPoints*50+1);
+else
+    meshPoint = linspace(0, 1.2*pi*numPoints, numPoints*50+1);
+end
 % Continuous filter function
 figure(1);
 plot(meshPoint, betaContinuous(meshPoint,opts), '-b', 'LineWidth', 1.5); hold on;
-plot(disLambda, betaContinuous(disLambda,opts), '*r', 'LineWidth', 1.2);
+plot(lambda_h(lambda_h < meshPoint(end)), ...
+     betaContinuous(lambda_h(lambda_h < meshPoint(end)), opts), ...
+     '*r', 'LineWidth', 1.2);
 plot(comLambda, betaContinuous(comLambda,opts), 'ok', 'LineWidth', 1.2);
 legend('\beta', 'discrete \lambda_j (true)', 'computed');
 xlabel('\lambda'); ylabel('\beta'); grid on;
 title(sprintf('Continuous filter function: \\omega=%g, Np=%d, %d eigs computed', ...
       opts.omega, Np, numComputed));
+
 
 % Discrete filter function (evaluated at the modified eigenvalues)
 figure(2);
