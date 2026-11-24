@@ -1,0 +1,326 @@
+%
+%  Example solution set
+%
+\documentclass[11pt]{article}
+% 
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{calc}
+\usepackage[margin=1.in]{geometry}
+\usepackage{bm}
+\usepackage[usenames]{color}
+
+\usepackage{fancyvrb}% fancy Verbatim
+\usepackage{media9} % to attach viedo file in latex
+\usepackage{listings}
+\lstset{
+	basicstyle=\footnotesize\ttfamily,
+	columns=flexible,
+	breaklines=true,
+	tabsize=2,
+	commentstyle=\color{red},
+	keywordstyle=\color{blue}\bfseries,
+	keepspaces=true
+}
+
+\lstset{language=C++,
+	basicstyle=\footnotesize\ttfamily,
+	keywordstyle=\color{blue}\footnotesize\ttfamily,
+	stringstyle=\color{green}\footnotesize\ttfamily,
+	commentstyle=\color{red}\footnotesize\ttfamily,
+	morecomment=[l][\color{magenta}]{\#},
+	columns=flexible,
+	breaklines=true,
+	keepspaces=true        
+}
+\def\ab{{\bm a}} \def\cb{{\bm c}} \def\db{{\bm d}} \def\eb{{\bm e}}
+\def\bb{{\bm b}} \def\yb{{\bm y}}
+\def\ub{{\bm u}}  \def\xb{{\bm x}} \def\vb{{\bm v}} \def\wb{{\bm w}}
+\def\omegab{{\bm \omega}} \def\rb{{\bm r}} \def\ib{{\bm i}} \def\jb{{\bm j}}
+\def\lb{{\bm l}} \def\kb{{\bm k}} \def\Ab{{\bm A}} \def\fb{{\bm f}} \def\Ub{{\bm U}}
+\def\Fb{{\bm F}} \def\nb{{\bm n}} \def\Db{{\bm D}} \def\eb{{\bm e}} 
+\def\gb{{\bm g}}  \def\Gb{{\bm G}} \def\hb{{\bm h}} \def\Yb{{\bm Y}} \def\Rb{{\bm R}} 
+\def\Tb{{\bm T}} \def\zb{{\bm z}} \def\Zb{{\bm Z}} \def\Qb{{\bm Q}} \def\Cb{{\bm C}} 
+\def\Bb{{\bm B}} \def\Rbb{{\mathbb R}} \def\Cbb{{\mathbb C}} \def\Lb{{\bm L}} \def\Mb{{\bm M}}
+\def\Hb{{\bm H}} \def\Wb{{\bm W}} \def\Vb{{\bm V}}
+\newcommand{\Dp}{D_+}
+\newcommand{\Dm}{D_-}
+\newcommand{\Dz}{D_0}
+\newcommand{\dx}{\Delta x}
+\newcommand{\dy}{\Delta y}
+\newcommand{\dt}{\Delta t}
+\newcommand{\Nx}{N_x} 
+\newcommand{\norm}[1]{\left\Vert{#1}\right\Vert}
+\begin{document}
+	
+	
+\begin{center}
+\Large{MATH 6890: PARALLEL METHODS FOR SCIENTIFIC COMPUTING \\
+Fall 2023}\\
+\textbf{Instructor:} Prof. Henshaw
+\end{center}
+\begin{center}
+ Ngan Le\\
+\textbf {FINAL PROJECT \\
+PARALLEL SOLVER FOR ANISOTROPIC WAVE EQUATION} 
+\end{center}
+
+	
+	\medskip
+	% -------------------------
+	
+	\section{Project description}
+\subsection{Overview}
+The aim of this project is to develop parallel solvers for the anisotropic wave equation in two-dimensional space with Dirichlet boundary conditions on a rectangular domain $\Omega = (a_x,b_x) \times (a_y,b_y)$
+\begin{subequations}
+\label{eq:2DAnisotropicWaveEquation}
+\begin{align}
+& \rho(x,y)w_{tt}=\nabla\cdot\left(\bm{m}(x,y)\cdot\nabla w\right) +f(x,y,t), && (x,y)\in \Omega,\; 0 \leq t \leq t_{\text{final}}, \label{eq:2DAnisotropicWaveEquationA} \\
+& w(a_x,y,t) = g_{ax}(y,t), \quad w(b_x,y,t) = g_{bx}(y,t), && y \in [a_y,b_y],\; 0 \leq t \leq t_{\text{final}}, \label{eq:2DAnisotropicWaveEquationB} \\
+& w(x,a_y,t) = g_{ay}(x,t), \quad w(x,b_y,t) = g_{by}(x,t), && x \in [a_x,b_x],\; 0 \leq t \leq t_{\text{final}}, \label{eq:2DAnisotropicWaveEquationC} \\
+& w(x,y,0) = v_0(x,y), \quad w_t(x,y,0) = v_1(x,y), && (x,y) \in \Omega. \label{eq:2DAnisotropicWaveEquationD}
+\end{align}
+\end{subequations}
+Here $\rho(x,y) > 0$ is the density and $\bm{m}(x,y)$ is the stiffness matrix (material stiffness tensor),
+\begin{align*}
+& \bm{m}(x,y)=\begin{bmatrix}
+	m_{11}(x,y) & m_{12}(x,y)\\
+	m_{21}(x,y) & m_{22}(x,y)
+\end{bmatrix}.
+\end{align*}
+The matrix $\bm{m}(x,y)$ is positive definite for all $(x,y)\in \Omega$. Note that $\rho$ and $\bm{m}$ are piecewise continuous on $\Omega$. The derivatives in~\eqref{eq:2DAnisotropicWaveEquationA} can be written explicitly as
+\begin{align}
+\nabla\cdot\left(\bm{m}\cdot\nabla w\right) = \partial_x (m_{11}w_x + m_{12}w_y) + \partial_y (m_{21}w_x + m_{22}w_y). \label{eq:2DAnisotropicOperator}
+\end{align}
+
+\subsection{Numerical scheme}
+The grid is $x_i = a_x + i\Delta x$, $y_j = a_y + j\Delta y$, $t^n = n\Delta t$, with $\Delta x = (b_x-a_x)/N_x$, $\Delta y = (b_y-a_y)/N_y$ and $\Delta t = t_{\text{final}}/N_t$. The coefficients are averaged to the half grid points,
+\begin{align*}
+& M^{kl}_{i\pm1/2,j} = \dfrac{m_{kl}(x_{i},y_j)+m_{kl}(x_{i\pm1},y_j)}{2}, \quad M^{kl}_{i,j\pm1/2} = \dfrac{m_{kl}(x_{i},y_j)+m_{kl}(x_{i},y_{j\pm1})}{2}, \quad k,l=1,2,
+\end{align*}
+and we write $f_{ij}^n=f(x_i,y_j,t^n)$, $\rho_{ij}=\rho(x_i,y_j)$. The second-order accurate finite difference approximation of the operator~\eqref{eq:2DAnisotropicOperator} is
+\begin{align}
+L_h W_{ij} ={}& D_{+x}\left[M^{11}_{i-1/2,j}D_{-x}W_{ij}\right]+D_{+y}\left[M^{22}_{i,j-1/2}D_{-y}W_{ij}\right] \notag\\
+& + \dfrac{1}{2\Delta x}\left[M^{12}_{i+1/2,j}D_{0y}W_{i+1,j} - M^{12}_{i-1/2,j}D_{0y}W_{i-1,j}\right] \notag\\
+& + \dfrac{1}{2\Delta y}\left[M^{21}_{i,j+1/2}D_{0x}W_{i,j+1} - M^{21}_{i,j-1/2}D_{0x}W_{i,j-1}\right]. \label{eq:2DAnisotropicLh}
+\end{align}
+The explicit scheme for~\eqref{eq:2DAnisotropicWaveEquation} is given by
+\begin{subequations}
+\label{eq:explicitScheme}
+\begin{enumerate}
+\item [$\bullet$] \textcolor{blue}{Difference equation:}
+\begin{align}
+& \rho_{ij}\, D_{+t}D_{-t}W_{ij}^n = L_h W_{ij}^n + f_{ij}^n, \label{eq:explicitSchemeA}\\
+& \quad i=1,2,\dots,N_x-1,\quad j=1,2,\dots, N_y-1,\quad n=1,2,\dots, N_t-1. \notag
+\end{align}
+
+\item [$\bullet$] \textcolor{blue}{Initial conditions:}
+\begin{align}
+& W_{ij}^0=V_{0,ij}, && i=1,\dots,N_x-1,\; j=1,\dots, N_y-1, \label{eq:explicitSchemeB}\\
+& W_{ij}^1=V_{0,ij}+\Delta t\, V_{1,ij} +\dfrac{\Delta t^2}{2\rho_{ij}}\left[L_h V_{0,ij} + f_{ij}^0\right], && i=1,\dots,N_x-1,\; j=1,\dots, N_y-1, \label{eq:explicitSchemeC}
+\end{align}
+where $V_{0,ij} = v_0(x_i,y_j)$ and $V_{1,ij} = v_1(x_i, y_j)$.
+
+\item [$\bullet$] \textcolor{blue}{Boundary conditions:}
+\begin{align}
+&W_{0j}^n = g_{ax}(y_j,t^n), \quad W_{N_x j}^n = g_{bx}(y_j,t^n), && j=0,1,\dots, N_y,\; n=0,1,\dots, N_t, \label{eq:explicitSchemeD}\\
+&W_{i0}^n = g_{ay}(x_i,t^n), \quad W_{i N_y}^n = g_{by}(x_i,t^n), && i=0,1,\dots, N_x,\; n=0,1,\dots, N_t. \label{eq:explicitSchemeE}
+\end{align}
+\end{enumerate}
+\end{subequations}
+The approximation for $W^1_{ij}$ is obtained from the Taylor series expansion of $w(x,y,\Delta t)$, together with the PDE and the initial conditions:
+\begin{align*}
+w(x,y,\Delta t) &= w(x,y,0)+\Delta t\, w_t(x,y,0) + \dfrac{\Delta t^2}{2} w_{tt}(x,y,0)+\mathcal{O}(\Delta t^3)\\
+	&=v_0(x,y) + \Delta t\, v_1(x,y) + \dfrac{\Delta t^2}{2\rho(x,y)} \left[\nabla\cdot\left(\bm{m}(x,y)\cdot\nabla v_0\right) +f(x,y,0)\right]+\mathcal{O}(\Delta t^3).
+\end{align*}
+Thus, substituting $V_{0,ij}$ and $V_{1,ij}$ gives the approximation in~\eqref{eq:explicitSchemeC}.
+
+The time step restriction is
+\begin{align}
+	\Delta t \leq \mbox{cfl} \cdot \min_{i,j}\dfrac{\sqrt{\rho_{ij}}}{\sqrt{\dfrac{m_{11}(x_i,y_j)}{\Delta x^2} + \dfrac{\left|m_{12}(x_i,y_j)+m_{21}(x_i,y_j)\right|}{4\Delta x \Delta y} + \dfrac{m_{22}(x_i,y_j)}{\Delta y^2}}}, \quad \mbox{cfl} < 1.
+\end{align}
+The number of time steps is then $N_t = \lceil t_{\text{final}}/\Delta t \rceil$, and $\Delta t$ is reset to $t_{\text{final}}/N_t$ so that the final time is reached exactly.
+
+
+
+\section{Numerical results.}
+\subsection{Serial version}
+$\bullet$ Results for constant coefficients with
+\begin{align*}
+	&a_x=0; \; b_x=1;\; a_y=0;\; b_y=1;\\
+	&\rho = 1; \quad  \bm{m}=\begin{bmatrix}
+		1 & 1\\
+		0 & 2
+	\end{bmatrix}.
+\end{align*}
+\textcolor{red}{Polynomial manufactured solution (we indeed get the ''exact" answer.)}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+wave2dSerial -nx=20 -tFinal=0.5 -debug=0
+nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
+CPU: numSteps=21 nx=20 maxNorm=1.53e+00 maxRelErr=3.62e-16 cpuTime= 0.00e+00(s)
+
+wave2dSerial -nx=40 -tFinal=0.5 -debug=0
+nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
+CPU: numSteps=41 nx=40 maxNorm=1.53e+00 maxRelErr=5.80e-16 cpuTime= 6.00e-03(s)
+
+wave2dSerial -nx=80 -tFinal=0.5 -debug=0
+nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
+CPU: numSteps=81 nx=80 maxNorm=1.53e+00 maxRelErr=8.70e-16 cpuTime= 3.90e-02(s)
+\end{Verbatim}
+\textcolor{red}{Trigonometric solution (we get second-order accuracy.)}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+wave2dSerial -nx=20 -tFinal=0.5 -debug=0
+nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
+CPU: numSteps=21 nx=20 maxNorm=3.00e+00 maxRelErr=2.34e-05 cpuTime= 0.00e+00(s)
+
+wave2dSerial -nx=40 -tFinal=0.5 -debug=0
+nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
+CPU: numSteps=41 nx=40 maxNorm=3.00e+00 maxRelErr=6.03e-06 cpuTime= 4.00e-03(s)
+
+wave2dSerial -nx=80 -tFinal=0.5 -debug=0
+nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
+CPU: numSteps=81 nx=80 maxNorm=3.00e+00 maxRelErr=1.53e-06 cpuTime= 2.80e-02(s)
+\end{Verbatim}
+
+
+$\bullet$ Results for variable coefficients with
+\begin{align*}
+	&\rho(x,y) = \sin(x+y)+1.1; \quad  \bm{m}(x,y)=\begin{bmatrix}
+		a_{11}(x+y)+1 & 2\\
+		0 & a_{22}(2x+y)+2 %\nabla^2 \Delta
+	\end{bmatrix}.
+\end{align*}
+\textcolor{red}{Polynomial manufactured solution (we still get the ''exact" answer.)}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+wave2dSerial -nx=20 -tFinal=0.5 -debug=0
+nx=20 ny=20 dt=2.50e-02 numSteps=20 tFinal=  0.50
+CPU: numSteps=20 nx=20 maxNorm=1.53e+00 maxRelErr=1.27e-15 cpuTime= 1.00e-03(s)
+	
+wave2dSerial -nx=40 -tFinal=0.5 -debug=0
+nx=40 ny=40 dt=1.25e-02 numSteps=40 tFinal=  0.50
+CPU: numSteps=40 nx=40 maxNorm=1.53e+00 maxRelErr=1.74e-15 cpuTime= 8.00e-03(s)
+	
+wave2dSerial -nx=80 -tFinal=0.5 -debug=0
+nx=80 ny=80 dt=6.25e-03 numSteps=80 tFinal=  0.50
+CPU: numSteps=80 nx=80 maxNorm=1.53e+00 maxRelErr=8.26e-15 cpuTime= 6.10e-02(s)
+\end{Verbatim}
+\subsection { Parallel version}
+Here we are testing for polynomial manufactured solution with constant coefficients using 4 threads/processes. We observe that the errors are the same as those in the serial code.\\
+	$\bullet$ OpenMP code
+%			\begin{table}[H]\footnotesize 
+%					\begin{center}
+%						\begin{tabular}{|c|c|c|c|c|} \hline 
+%						%	\multicolumn{4}{|c|}{heat1d CUDA version}    \\  \hline
+%							$\mbox{nx}$   & $\mbox{tFinal}$        & $\mbox{Nt}$   & $\mbox{maxNorm}$  & $\mbox{maxRelErr}$	\\  \hline 
+%							$ 20 $     & $\mbox{0.5}$          & $ 21 $       & $1.53e+00$   & $3.62e-16$   \\ 
+%							$ 40 $     & $\mbox{0.5}$          & $ 41 $       & $1.53e+00$   & $5.80e-16$  \\ 
+%							$ 80 $    & $\mbox{0.5}$          & $ 81 $       & $1.53e+00$   &  $8.70e-16$  \\ 
+%							$ 160 $   & $\mbox{0.5}$         & $ 161 $       & $1.53e+00$   &   $1.59e-15$  \\ 
+%							\hline
+%						\end{tabular}
+%						\caption{
+%							Results for polynomial manufactured solution with 1 thread
+%						}
+%						\label{tab:openMPwave2d}
+%					\end{center}
+%				\end{table}
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+./wave2dOpenMP -nx=20 -tFinal=0.5 -numThreads=4 -debug=0
+nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
+CPU: numSteps=21 nx=20 maxNorm=1.53e+00 maxRelErr=3.62e-16 cpuTime= 7.62e-04(s)
+	
+./wave2dOpenMP -nx=40 -tFinal=0.5 -numThreads=4 -debug=0
+nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
+CPU: numSteps=41 nx=40 maxNorm=1.53e+00 maxRelErr=5.80e-16 cpuTime= 5.03e-03(s)
+	
+./wave2dOpenMP -nx=80 -tFinal=0.5 -numThreads=4 -debug=0
+nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
+CPU: numSteps=81 nx=80 maxNorm=1.53e+00 maxRelErr=8.70e-16 cpuTime= 3.90e-02(s)
+\end{Verbatim}
+\newpage
+	$\bullet$ MPI code
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+mpirun -np=4 ./wave2dMPI -tFinal=.5 -nx=20 -debug=0
+nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
+np=4 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=3.62e-16 cpuTimeStepG= 2.26e-04(s)
+
+mpirun -np=4 ./wave2dMPI -tFinal=.5 -nx=40 -debug=0
+nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
+np=4 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=5.80e-16 cpuTimeStepG= 6.04e-04(s)
+
+mpirun -np=4 ./wave2dMPI -tFinal=.5 -nx=80 -debug=0
+nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
+np=4 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=8.70e-16 cpuTimeStepG= 7.57e-03(s)
+\end{Verbatim}
+
+
+\section{Parallel speedup.}
+For testing speedup, we run the code on cg66 using $nx = ny = 2048$, $\mbox{tFinal=0.1}$. The serial code took 32.9 seconds to run. Here are the results for openMP and MPI versions.
+\begin{table}[H]\footnotesize 
+\begin{center}
+\begin{tabular}{|c|c|c|c|} \hline 
+\multicolumn{4}{|c|}{openMP version}    \\  \hline
+$\mbox{Threads}$   & $\mbox{cpu (s)}$        & $\mbox{Speedup}$   & $\mbox{Par-Eff}$   	\\  \hline 
+$ 1 $     & $34.2$          & $ 1 $               & $1$       \\ 
+$ 2$     & $\mbox{17.6}$          & $ 1.94 $       & $0.74$    \\ 
+$ 4$    & $\mbox{9.71}$          & $ 3.52 $       & $0.88$   \\ 
+$ 8 $   & $\mbox{4.76}$         & $ 7.18 $       & $0.89$   \\ 
+$ 16 $   & $\mbox{2.48}$         & $ 13.79 $       & $0.86$   \\
+$ 32 $   & $\mbox{1.27}$         & $ 26.92 $       & $0.84$   \\
+\hline
+\end{tabular}
+\caption{
+Speedup for openMP code.
+}
+\label{tab:openMP code}
+\end{center}
+\end{table}
+
+\begin{table}[H]\footnotesize 
+\begin{center}
+\begin{tabular}{|c|c|c|c|} \hline 
+\multicolumn{4}{|c|}{MPI version}    \\  \hline
+$\mbox{np}$   & $\mbox{cpu (s)}$        & $\mbox{Speedup}$   & $\mbox{Par-Eff}$   	\\  \hline 
+$ 1 $     & $32.5$          & $ 1 $       & $1$       \\ 
+$ 2$     & $\mbox{16.6}$          & $ 1.95 $       & $0.97$    \\ 
+$ 4$    & $\mbox{9.09}$          & $ 3.34 $       & $0.83$   \\ 
+$ 8 $   & $\mbox{4.81}$         & $ 6.75 $       & $0.84$   \\ 
+$ 16 $   & $\mbox{2.52}$         & $ 12.89 $       & $0.80$   \\
+$ 32 $   & $\mbox{2.17}$         & $ 14.97 $       & $0.46$   \\
+\hline
+\end{tabular}
+\caption{
+Speedup for MPI code.
+}
+\label{tab:MPI code}
+\end{center}
+\end{table}
+\clearpage
+
+
+
+
+	
+	
+	
+% \lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={wave2dSerial.C},label=code:serial,frame=single]{"D:/Documents/Graduate/PHD/RPI/Fall 2023/MATH-6890 Parallel Methods/Final Project/serialCode/wave2dSerial.C"}
+% \lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={wave2dOpenMP.C},label=code:openMP,frame=single]{"D:/Documents/Graduate/PHD/RPI/Fall 2023/MATH-6890 Parallel Methods/Final_Project/openMP Code/wave2dOpenMP.C"}
+% \lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={wave2dMPI.C},label=code:MPI,frame=single]{"D:/Documents/Graduate/PHD/RPI/Fall 2023/MATH-6890 Parallel Methods/Final Project/MPI Code/wave2dMPI.C"}
+%	\lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={heat2d.cu},label=code:heat2d,frame=single]{"D:/Documents/Graduate/PHD/RPI/Fall 2023/MATH-6890 Parallel Methods/CUDA code/heat2d.C"}
+%	\lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={heatADI.C},label=code:Makefile,frame=single]{code/heatADI.C}
+	%\lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={heat2dUpdate.f90},label=code:heat2dUpdate,frame=single]{code/heat2dUpdate.f90}
+	%\lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={heat1d.C},label=code:heat1dParallelVersion,frame=single]{code/heat1d.C}
+	
+	%\lstinputlisting[language=Matlab, numbers=left, stepnumber=1, firstline=1,caption={writeMatlabArray.h},label=code:writeMatlabArray,frame=single]{code/writeMatlabArray.h}
+	
+%	\lstinputlisting[language=C++, numbers=left, stepnumber=1, firstline=1,caption={poisson.C},label=code:poissonParallelVersion,frame=single]{code/poisson.C}
+\end{document}
+% =====================================================
+% =====================================================
+% =====================================================
+
+
+
+

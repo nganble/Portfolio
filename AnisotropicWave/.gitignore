@@ -1,0 +1,22 @@
+# compiled binaries
+serial/wave2dSerial
+parallel_openmp/wave2dOpenMp
+parallel_mpi/wave2dMPI
+*.exe
+*.o
+
+# MPI debug output (keep the folder: wave2dMPI writes into it)
+parallel_mpi/debug/*.debug
+!parallel_mpi/debug/.gitkeep
+
+# LaTeX build files
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
+
+# macOS / MATLAB
+.DS_Store
+*.asv
