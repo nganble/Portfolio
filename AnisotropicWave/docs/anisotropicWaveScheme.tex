@@ -90,21 +90,21 @@ Here $\rho(x,y) > 0$ is the density and $\bm{m}(x,y)$ is the stiffness matrix (m
 	m_{21}(x,y) & m_{22}(x,y)
 \end{bmatrix}.
 \end{align*}
-The matrix $\bm{m}(x,y)$ is positive definite for all $(x,y)\in \Omega$. Note that $\rho$ and $\bm{m}$ are piecewise continuous on $\Omega$. The derivatives in~\eqref{eq:2DAnisotropicWaveEquationA} can be written explicitly as
+The matrix $\bm{m}$ is symmetric ($m_{12}=m_{21}$) and positive definite for all $(x,y)\in \Omega$. Note that $\rho$ and $\bm{m}$ are piecewise continuous on $\Omega$. The derivatives in~\eqref{eq:2DAnisotropicWaveEquationA} can be written explicitly as
 \begin{align}
 \nabla\cdot\left(\bm{m}\cdot\nabla w\right) = \partial_x (m_{11}w_x + m_{12}w_y) + \partial_y (m_{21}w_x + m_{22}w_y). \label{eq:2DAnisotropicOperator}
 \end{align}
 
 \subsection{Numerical scheme}
-The grid is $x_i = a_x + i\Delta x$, $y_j = a_y + j\Delta y$, $t^n = n\Delta t$, with $\Delta x = (b_x-a_x)/N_x$, $\Delta y = (b_y-a_y)/N_y$ and $\Delta t = t_{\text{final}}/N_t$. The coefficients are averaged to the half grid points,
+The grid is $x_i = a_x + i\Delta x$, $y_j = a_y + j\Delta y$, $t^n = n\Delta t$, with $\Delta x = (b_x-a_x)/N_x$, $\Delta y = (b_y-a_y)/N_y$ and $\Delta t = t_{\text{final}}/N_t$. The diagonal coefficients are averaged to the half grid points, and the off-diagonal coefficients are evaluated at the grid points,
 \begin{align*}
-& M^{kl}_{i\pm1/2,j} = \dfrac{m_{kl}(x_{i},y_j)+m_{kl}(x_{i\pm1},y_j)}{2}, \quad M^{kl}_{i,j\pm1/2} = \dfrac{m_{kl}(x_{i},y_j)+m_{kl}(x_{i},y_{j\pm1})}{2}, \quad k,l=1,2,
+& M^{11}_{i\pm1/2,j} = \dfrac{m_{11}(x_{i},y_j)+m_{11}(x_{i\pm1},y_j)}{2}, \quad M^{22}_{i,j\pm1/2} = \dfrac{m_{22}(x_{i},y_j)+m_{22}(x_{i},y_{j\pm1})}{2}, \\
+& M^{12}_{ij} = m_{12}(x_i,y_j), \quad M^{21}_{ij} = m_{21}(x_i,y_j),
 \end{align*}
 and we write $f_{ij}^n=f(x_i,y_j,t^n)$, $\rho_{ij}=\rho(x_i,y_j)$. The second-order accurate finite difference approximation of the operator~\eqref{eq:2DAnisotropicOperator} is
 \begin{align}
 L_h W_{ij} ={}& D_{+x}\left[M^{11}_{i-1/2,j}D_{-x}W_{ij}\right]+D_{+y}\left[M^{22}_{i,j-1/2}D_{-y}W_{ij}\right] \notag\\
-& + \dfrac{1}{2\Delta x}\left[M^{12}_{i+1/2,j}D_{0y}W_{i+1,j} - M^{12}_{i-1/2,j}D_{0y}W_{i-1,j}\right] \notag\\
-& + \dfrac{1}{2\Delta y}\left[M^{21}_{i,j+1/2}D_{0x}W_{i,j+1} - M^{21}_{i,j-1/2}D_{0x}W_{i,j-1}\right]. \label{eq:2DAnisotropicLh}
+& + D_{0x}\left[M^{12}_{ij}D_{0y}W_{ij}\right]+D_{0y}\left[M^{21}_{ij}D_{0x}W_{ij}\right]. \label{eq:2DAnisotropicLh}
 \end{align}
 The explicit scheme for~\eqref{eq:2DAnisotropicWaveEquation} is given by
 \begin{subequations}

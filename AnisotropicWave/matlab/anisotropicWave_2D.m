@@ -6,41 +6,32 @@
 %---------------------          [ m_21(x,y) m_22(x,y)]--------------------%
 %--------------------- (x,y)\in [a,b]*[c,d], t>0 -------------------------%
 
-clc;
-close all;
+clc; clear; close all;
 
 
-% Test solutions
-%ms = 'poly';
-%ms = 'trig';
-ms = "pulse";
+%% Test solutions
+ms = 'poly';
+% ms = 'trig';
+% ms = "pulse";
 % ms = "trigPulse";
+% For piecewise coefficients, no exact solution
+
+% For gauss and gaussForce, there is no exact solution
 % ms = "gauss";
 % ms = "gaussForce";
 
-% Domain
-if (strcmp(ms, "poly"))
-    ax = 0; bx = 1;
-    ay = 0; by = 1;
-else
-    ax = 0;  
-    ay = 0;
-    if (strcmp(ms, "gauss")||(strcmp(ms, "gaussForce")))
-        bx = 8*pi;
-        by = 8*pi;
-    else
-        bx = 2*pi;
-        by = 2*pi;
-    end
-end
-% pulse solution kx=1, ky=-0.1
+%%  Domain
+ax = -1; bx = 1;
+ay = -1; by = 1;
+
+% Wavenumbers
 kx = 1;
 ky = 1;
-%ms = "const";
-coeffs = "var";
-%topView = "on";
-topView = "off";
-makeMovie = 1; % 1=make movie, 2=save Movie too
+
+coeffs = "const";       % 'const' | 'var' | 'piecewise'
+topView = "on";             % 'on' | 'off'
+
+makeMovie = 0;              % 0=no movie (convergence test) | 1=make movie | 2=save movie too
 if (makeMovie==0)
     tFinal=.5;
 else
@@ -59,22 +50,13 @@ else
             tFinal = 10;
         end
     else
-        if (strcmp(ms, "trig"))
-            tFinal = 1;
-        elseif (strcmp(ms, "pulse"))
-            tFinal = 0.5;
-        elseif (strcmp(ms, "trigPulse"))
-            tFinal = 0.5;
-        elseif (strcmp(ms, "gaussForce"))
-            tFinal = 1;
-        elseif (strcmp(ms, "gauss")) 
-            tFinal = 1.2;
-        end
+        tFinal = 1;
     end
     
 end
+
 cfl = 0.9;
-debug = 0; % debug=1 check after first time-step, debug=2 check approx U1
+debug = 0; % debug=1 check after first time-step | debug=2 check approx U1
 
 % Grid refinement
 if (makeMovie==0)
@@ -107,36 +89,41 @@ else
 end
 
 
-% Function rho and matrix m
-if (strcmp(coeffs,"var"))
-    a11 = .3; a12 = .2; a21 = .2; a22 =.6; 
+%%  Function rho and matrix m
+if (strcmp(coeffs,"const"))            % isotropic: rho = 1, m = I
+    RHO = @(x,y) 1 + 0*x + 0*y;
+    M11 = @(x,y) 1 + 0*x + 0*y;   M11x = @(x,y) 0*x + 0*y;
+    M12 = @(x,y) 0*x + 0*y;       M12x = @(x,y) 0*x + 0*y;
+    M21 = @(x,y) 0*x + 0*y;       M21y = @(x,y) 0*x + 0*y;
+    M22 = @(x,y) 1 + 0*x + 0*y;   M22y = @(x,y) 0*x + 0*y;
+elseif (strcmp(coeffs,"var"))          % symmetric positive definite on (-1,1)^2
     RHO = @(x,y) 0.1*(sin(x+y)+1.1);
-    %RHO = @(x,y) 1. + 0*x+0*y;
-    M11 = @(x,y) a11*(x+y)+1.;
-    M11x = @(x,y) a11+0.*x+0.*y;
-    M12 = @(x,y)  0*x + 0*y;
-    M12x = @(x,y) 0.*x + 0.*y;
-    M21 = @(x,y) 2 + 0.*x + 0.*y;
-    M21y = @(x,y) 0.*x + 0.*y;
-    M22 = @(x,y) a22*(2.*x+y)+2;
-    M22y = @(x,y) a22+0.*x+0.*y;
-    
-else
-    %rho = @(x,y) sin(x+y)+1.1;
-    RHO = @(x,y) 1. + 0*x + 0*y;
-    M11 = @(x,y) 1. + 0*x + 0*y;
-    M11x = @(x,y,t) 0.*x + 0.*y;
-    M12 = @(x,y) 1. + 0*x + 0*y;
-    M12x = @(x,y) 0.*x + 0.*y;
-    M21 = @(x,y) 0*x + 0*y;
-    M21y = @(x,y) 0.*x + 0.*y;
-    M22 = @(x,y) 2. + 0*x + 0*y;
-    M22y = @(x,y) 0.*x + 0.*y;
+    M11 = @(x,y) 0.3*(x+y) + 2;     M11x = @(x,y) 0.3 + 0*x + 0*y;
+    M12 = @(x,y) 0.5 + 0.2*(x+y);   M12x = @(x,y) 0.2 + 0*x + 0*y;
+    M21 = M12;                      M21y = @(x,y) 0.2 + 0*x + 0*y;
+    M22 = @(x,y) 0.6*(2*x+y) + 3;   M22y = @(x,y) 0.6 + 0*x + 0*y;
+
+    % Another option for variable density and stiffness matrix
+    % RHO = @(x,y) 0.1*(sin(x+y)+1.1);
+    % M11 = @(x,y) 2 + 0.3*(x+y);                         M11x = @(x,y) 0.3 + 0*x + 0*y;
+    % M12 = @(x,y) 0.5 + 0.2*sin(pi*x).*cos(pi*y);        M12x = @(x,y)  0.2*pi*cos(pi*x).*cos(pi*y);
+    % M21 = M12;                                          M21y = @(x,y) -0.2*pi*sin(pi*x).*sin(pi*y);
+    % M22 = @(x,y) 3 + 0.6*(2*x+y);                       M22y = @(x,y) 0.6 + 0*x + 0*y;
+elseif (strcmp(coeffs,"piecewise"))    % left: x<0, right: x>=0
+    L = @(x) (x < 0);  R = @(x) (x >= 0);
+    RHO = @(x,y) (1*L(x) + 2*R(x)) + 0*y;
+    M11 = @(x,y) (1*L(x) + 4*R(x)) + 0*y;
+    M12 = @(x,y) (0*L(x) + 0.5*R(x)) + 0*y;
+    M21 = @(x,y) (0*L(x) + 0.5*R(x)) + 0*y;
+    M22 = @(x,y) (1*L(x) + 2*R(x)) + 0*y;
+    % derivatives are not used: piecewise runs only with "gauss" (f = 0)
 end
 
-omega = sqrt(M11(ax,bx)*kx^2+(M12(ax,bx)+M21(ax,bx))*kx*ky+...
-        M22(ax,bx)*ky^2)/sqrt(RHO(ax,bx));
+% Dispersive relation -- only use for constant variable cases
+omega = sqrt(M11(ax,ay)*kx^2+(M12(ax,ay)+M21(ax,ay))*kx*ky+...
+        M22(ax,ay)*ky^2)/sqrt(RHO(ax,ay));
 
+%% Manufactured and exact solution for testing
 if (strcmp(ms,'poly'))
     % Polynomial manufactured solution
     a0 = .5; a1 = .7; a2 = .9;     % time coefficients
@@ -158,13 +145,13 @@ elseif (strcmp(ms,"trig"))
     %ue = @(x,y,t) 3*sin(kx*x+ky*y-omega*t)+3*cos(kx*x+ky*y-omega*t);
     %uet = @(x,y,t) -3*omega*cos(kx*x+ky*y-omega*t)+3*omega*sin(kx*x+ky*y-omega*t);
 elseif (strcmp(ms,"pulse"))
-    beta = 1.;
-    x0 = pi/2;
+    beta = 3;
+    x0 = 0; % Central of the pulse
     ue = @(x,y,t) 4*exp(-beta*(kx*x+ky*y-omega*t-x0).^2);
     uet = @(x,y,t) 2*beta*omega*(kx*x+ky*y-omega*t-x0).*ue(x,y,t);
 elseif (strcmp(ms,"trigPulse"))
-    beta = .5;
-    x0 = pi/2;
+    beta = 2.5;
+    x0 = 0;
     kn = 2;
     ue = @(x,y,t) 2*exp(-beta*(kx*x+ky*y-omega*t-x0).^2)...
             .*cos(kn*(kx*x+ky*y-omega*t-x0));
@@ -176,8 +163,8 @@ end
 
 % Initial conditions and boundary conditions and forcing
 if (strcmp(ms,"gauss"))
-    x0 = (ax+bx)/2; y0 = (ay+by)/2;
-    gamma = 1; sigmaX = 2; sigmaY = 3;
+    x0 = -0.5; y0 = (ay+by)/2;
+    gamma = 1; sigmaX = 0.15; sigmaY = 0.15;
     u0 = @(x,y) exp(-gamma*(((x-x0)/sigmaX).^2+((y-y0)/sigmaY).^2));
     u1 = @(x,y) 0.*x+0.*y;
     gax = @(y,t) 0.*t+0.*y;
@@ -186,8 +173,8 @@ if (strcmp(ms,"gauss"))
     gby = @(x,t) 0.*x+0.*t;
     f = @(x,y,t) 0.*x+0.*y+0*t;
 elseif (strcmp(ms,"gaussForce"))
-    x0 = (ax+bx)/2; y0 = (ay+by)/2;
-    gamma = 3; sigmaX = 2; sigmaY = 3;
+    x0 = -0.5; y0 = (ay+by)/2;
+    gamma = 3; sigmaX = 0.15; sigmaY = 0.15;
     u0 = @(x,y) 0.*x+0.*y;
     u1 = @(x,y) 0.*x+0.*y;
     gax = @(y,t) 0.*t+0.*y;
@@ -232,7 +219,7 @@ if (makeMovie>1)
     open(videoWriterObj);
 end
 
-
+%% Convergence test
 errMax = zeros(numResolutions,1);
 for m = startInd:numResolutions
     Nx = 10*2^m; Ny = 10*2^m;
@@ -289,8 +276,8 @@ for m = startInd:numResolutions
         -m(I,J-1).*(u(I+1,J-1)-u(I-1,J-1)))/(4*dx*dy);
     
     % Time stepping
-    dt = cfl*min(min(sqrt(rho)./sqrt( m11/(dx^2)+(m12...
-        +m21)/(4*dx*dy)+m22/(dy^2) )));
+    dt = cfl*min(min(sqrt(rho)./sqrt( m11/(dx^2)+abs((m12...
+        +m21))/(4*dx*dy)+m22/(dy^2) )));
     Nt = ceil(tFinal/dt);
     dt = tFinal/Nt; % adjust dt to exactly reach tFinal
     
@@ -377,15 +364,15 @@ for m = startInd:numResolutions
        end
        if (makeMovie>0 && m==startInd && mod(n,step)==0)
            figure(1);
-           surf(x,y,un);
+           surf(x,y,unp1);
            %surf(x,y,ue(x,y,t));
            colormap(getRainbow);
            xlabel("x"); ylabel("y"); zlabel("u");
            % shading interp;
            % view(0,90); % top view
-           az = min(min(un));
-           bz = max(max(un));
-           title(sprintf("2D-Anisotropic Wave Equation t=%4.2e",t));
+           az = min(min(unp1));
+           bz = max(max(unp1));
+           title(sprintf("2D-Anisotropic Wave Equation t=%4.2e",t + dt));
            %axis([ax bx ay by az bz]);
            if (strcmp(coeffs,"const"))
                if (strcmp(ms,"trig"))
@@ -433,9 +420,10 @@ for m = startInd:numResolutions
     end
     %-----------------------End time-stepping loop------------------------%
     
-    if (makeMovie==0 && (strcmp(coeffs,"const")||strcmp(ms,"poly")))
+    %% Check error
+    if (makeMovie==0 && ~startsWith(ms, "gauss") && (strcmp(coeffs,"const")||strcmp(ms,"poly")))
         % Compute error
-        t = t+dt;
+        t = tFinal;
         uexact = ue(x,y,t);
         err = uexact-un;
         errMax(m) = max(max(abs(err)));
@@ -448,7 +436,7 @@ for m = startInd:numResolutions
             fprintf('\n');
         end
         
-        % Plot results
+        % Plot results 
         if((m==3)&&(~strcmp(ms,'poly'))) % Plot for ms difers than poly
             figure(1);
             surf(x,y,un);
