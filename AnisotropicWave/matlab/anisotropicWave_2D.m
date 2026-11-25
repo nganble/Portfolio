@@ -6,19 +6,17 @@
 %---------------------          [ m_21(x,y) m_22(x,y)]--------------------%
 %--------------------- (x,y)\in [a,b]*[c,d], t>0 -------------------------%
 
-clc; clear; close all;
 
 
-%% Test solutions
-ms = 'poly';
-% ms = 'trig';
-% ms = "pulse";
-% ms = "trigPulse";
-% For piecewise coefficients, no exact solution
 
-% For gauss and gaussForce, there is no exact solution
-% ms = "gauss";
-% ms = "gaussForce";
+if ~exist('cases','var')        % standalone run: set the case here
+    clc;
+    ms      = "gauss";           % 'poly' | 'trig' | 'pulse' | 'trigPulse' | 'gauss' | 'gaussForce'
+    coeffs  = "const";          % 'const' | 'var' | 'piecewise'
+    saveRef = false;            % true: write reference, false: compare
+end
+clearvars -except ms coeffs saveRef cases nCases k pass
+close all;
 
 %%  Domain
 ax = -1; bx = 1;
@@ -28,10 +26,10 @@ ay = -1; by = 1;
 kx = 1;
 ky = 1;
 
-coeffs = "const";       % 'const' | 'var' | 'piecewise'
-topView = "on";             % 'on' | 'off'
 
-makeMovie = 0;              % 0=no movie (convergence test) | 1=make movie | 2=save movie too
+plotSol = false;
+makeMovie = 1;  % 0=no movie (convergence test) | 1=make movie | 2=save movie too
+topView = "on"; % 'on' | 'off'
 if (makeMovie==0)
     tFinal=.5;
 else
@@ -221,6 +219,7 @@ end
 
 %% Convergence test
 errMax = zeros(numResolutions,1);
+NxList = zeros(numResolutions,1); NtList = NxList; dtList = NxList; relErr = NxList;
 for m = startInd:numResolutions
     Nx = 10*2^m; Ny = 10*2^m;
     dx = (bx-ax)/Nx;
@@ -428,6 +427,7 @@ for m = startInd:numResolutions
         err = uexact-un;
         errMax(m) = max(max(abs(err)));
         maxNorm = max(max(un));
+        NxList(m) = Nx; NtList(m) = Nt; dtList(m) = dt; relErr(m) = errMax(m)/maxNorm;
         fprintf('%s: t=%4.2f Nx=%3d Ny=%3d Nt=%3d dt=%8.2e maxNorm=%8.2e maxRelErr=%8.2e',...
             ms,tFinal,Nx,Ny,Nt,dt,maxNorm,errMax(m)/maxNorm);
         if( m>1 )
@@ -436,8 +436,8 @@ for m = startInd:numResolutions
             fprintf('\n');
         end
         
-        % Plot results 
-        if((m==3)&&(~strcmp(ms,'poly'))) % Plot for ms difers than poly
+        %% Plot results optional 
+        if((m==3) && plotSol && (~strcmp(ms,'poly'))) % Plot for ms difers than poly
             figure(1);
             surf(x,y,un);
             colormap(getRainbow);
@@ -459,3 +459,23 @@ if (makeMovie>1)
     close(videoWriterObj);
 end
 
+%% Baseline: save or compare
+ok = true;
+if (makeMovie==0 && ~startsWith(ms,"gauss") && (strcmp(coeffs,"const")||strcmp(ms,"poly")))
+    refDir  = fullfile(fileparts(mfilename('fullpath')), '..', 'reference');
+    refFile = fullfile(refDir, sprintf('matlab_%s_%s.mat', coeffs, ms));
+    if saveRef
+        if ~exist(refDir,'dir'), mkdir(refDir); end
+        save(refFile, 'ms','coeffs','NxList','NtList','dtList','errMax','relErr','tFinal','cfl');
+        fprintf('Saved %s\n', refFile);
+    elseif exist(refFile,'file')
+        ref = load(refFile);
+        d   = max(abs(errMax - ref.errMax));
+        ok  = isequal(NtList, ref.NtList) && d < 1e-12;
+        if ok, s = 'PASS'; else, s = 'FAIL'; end
+        fprintf('Reference %s: max|errMax-ref| = %8.2e  %s\n', refFile, d, s);
+    else
+        ok = false;
+        fprintf('Reference %s not found (run with saveRef = true first)\n', refFile);
+    end
+end
