@@ -387,7 +387,10 @@ int main(int argc, char *argv[])
 
 		// Update the interior points
 		// Start parallel execution
-		#pragma omp parallel for default(shared) private(i1, i2) num_threads(numThreads)
+		// firstprivate: each thread gets its own copy of these pointers and scalars, so the
+		// compiler can keep them in registers and vectorize the stencil
+		#pragma omp parallel for default(shared) private(i1, i2) num_threads(numThreads) \
+			firstprivate(u_p, x_p, rho_p, m11_p, m12_p, m21_p, m22_p, dx, dt, t, nd1, nd1a, nd2a, prev, cur, next)
 		for(i2 = n2a+1; i2 <= n2b-1; i2++)
 		{
 			for(i1 = n1a+1; i1 <= n1b-1; i1++)

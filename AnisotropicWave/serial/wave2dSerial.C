@@ -101,8 +101,8 @@ int main(int argc, char *argv[])
 	#define CONS 1
 	#define VAR   2
 	#ifndef COEFF
-		//#define COEFF CONS
-		#define COEFF VAR
+		#define COEFF CONS
+		// # define COEFF VAR
 	#endif
 	
 	#if COEFF == CONS

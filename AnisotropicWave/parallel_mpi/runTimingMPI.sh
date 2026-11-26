@@ -13,7 +13,7 @@
 set -u
 cd "$(dirname "$0")"
 
-NX=${NX:-2048}
+NX=${NX:-3000}   # avoid nx near a power of two (cache conflicts, about 3x slower at 2048)
 TFINAL=${TFINAL:-0.1}
 NP=${NP:-"1 2 4 5 8 10"}
 REPEAT=${REPEAT:-3}

@@ -92,7 +92,7 @@ Here $\rho(x,y) > 0$ is the density and $\bm{m}(x,y)$ is the stiffness matrix (m
 \end{align*}
 The matrix $\bm{m}$ is symmetric ($m_{12}=m_{21}$) and positive definite for all $(x,y)\in \Omega$. Note that $\rho$ and $\bm{m}$ are piecewise continuous on $\Omega$. The derivatives in~\eqref{eq:2DAnisotropicWaveEquationA} can be written explicitly as
 \begin{align}
-\nabla\cdot\left(\bm{m}\cdot\nabla w\right) = \partial_x (m_{11}w_x + m_{12}w_y) + \partial_y (m_{21}w_x + m_{22}w_y). \label{eq:2DAnisotropicOperator}
+\nabla\cdot\left(\bm{m}\cdot\nabla w\right) = \partial_x (m_{11}w_x) + \partial_x (m_{12}w_y) + \partial_y (m_{21}w_x) + \partial_y (m_{22}w_y). \label{eq:2DAnisotropicOperator}
 \end{align}
 
 \subsection{Numerical scheme}
