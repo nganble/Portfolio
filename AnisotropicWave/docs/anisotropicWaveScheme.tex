@@ -106,7 +106,7 @@ and we write $f_{ij}^n=f(x_i,y_j,t^n)$, $\rho_{ij}=\rho(x_i,y_j)$. The second-or
 L_h W_{ij} ={}& D_{+x}\left[M^{11}_{i-1/2,j}D_{-x}W_{ij}\right]+D_{+y}\left[M^{22}_{i,j-1/2}D_{-y}W_{ij}\right] \notag\\
 & + D_{0x}\left[M^{12}_{ij}D_{0y}W_{ij}\right]+D_{0y}\left[M^{21}_{ij}D_{0x}W_{ij}\right]. \label{eq:2DAnisotropicLh}
 \end{align}
-\textcolor{red}{\textbf{Note (current C++ code, wrong):} the C++ codes (serial, OpenMP, MPI) average the off-diagonal coefficients to the half grid points but keep the differences at $i\pm1$ and $j\pm1$,
+\textcolor{red}{\textbf{Note (current C++ code, wrong):} the OpenMP and MPI codes (fixed in the serial code) average the off-diagonal coefficients to the half grid points but keep the differences at $i\pm1$ and $j\pm1$,
 \begin{align*}
 & \dfrac{1}{2\Delta x}\left[M^{12}_{i+1/2,j}D_{0y}W_{i+1,j} - M^{12}_{i-1/2,j}D_{0y}W_{i-1,j}\right] \\
 & + \dfrac{1}{2\Delta y}\left[M^{21}_{i,j+1/2}D_{0x}W_{i,j+1} - M^{21}_{i,j-1/2}D_{0x}W_{i,j-1}\right], \\
@@ -153,68 +153,105 @@ The number of time steps is then $N_t = \lceil t_{\text{final}}/\Delta t \rceil$
 
 
 
-\section{Numerical results.}
+\section{Numerical results}
+\subsection{Test cases}
+All tests are on $\Omega=(-1,1)\times(-1,1)$ with $t_{\text{final}}=0.5$, $\mbox{cfl}=0.9$ and $N_x=N_y=20,\,40,\,80,\,160$. Two sets of coefficients are used:
+\begin{itemize}
+\item \textcolor{blue}{Constant coefficients (isotropic material):} $\rho=1$, $\bm{m}=I$.
+\item \textcolor{blue}{Variable coefficients:}
+\begin{align*}
+\rho(x,y) = 0.1\left(\sin(x+y)+1.1\right), \quad
+\bm{m}(x,y)=\begin{bmatrix}
+	0.3(x+y)+2 & 0.5+0.2(x+y)\\
+	0.5+0.2(x+y) & 0.6(2x+y)+3
+\end{bmatrix}.
+\end{align*}
+The matrix $\bm{m}$ is symmetric ($m_{12}=m_{21}$) and positive definite on $\Omega$: $m_{11}\geq 1.4$ and $m_{11}m_{22}-m_{12}^2\geq 1.68-0.81>0$.
+\end{itemize}
+The exact solutions are
+\begin{itemize}
+\item \textcolor{blue}{poly} (manufactured solution, $f=\rho w_{tt}-\nabla\cdot(\bm{m}\cdot\nabla w)$):
+$w=(b_0+b_1x+b_2x^2)(c_0+c_1y+c_2y^2)(a_0+a_1t+a_2t^2)$, with $(a_0,a_1,a_2)=(0.5,0.7,0.9)$, $(b_0,b_1,b_2)=(0.5,0.8,0.6)$, $(c_0,c_1,c_2)=(0.3,0.25,0.2)$.
+\item \textcolor{blue}{trig}: $w=3\cos(s)$,
+\quad \textcolor{blue}{pulse}: $w=4e^{-3s^2}$,
+\quad \textcolor{blue}{trigPulse}: $w=2e^{-2.5s^2}\cos(2s)$,
+\end{itemize}
+where $s=k_xx+k_yy-\omega t$, $k_x=k_y=1$, $f=0$, and $\omega$ satisfies the dispersion relation $\rho\,\omega^2=m_{11}k_x^2+(m_{12}+m_{21})k_xk_y+m_{22}k_y^2$. The plane waves (trig, pulse, trigPulse) are exact solutions only for constant coefficients. The five test cases are
+\begin{table}[H]\footnotesize
+\begin{center}
+\begin{tabular}{|c|c|c|l|} \hline
+Case & Coefficients & Solution & Expected \\ \hline
+1 & constant & poly      & exact (round-off) \\
+2 & constant & trig      & second order (ratio $\approx 4$) \\
+3 & constant & pulse     & second order \\
+4 & constant & trigPulse & second order \\
+5 & variable & poly      & second order (not exact: $m_{12}$ is linear in $x$, so $m_{12}w_y$ is cubic in $x$) \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
+The MATLAB baseline is run with \texttt{matlab/runBaselineMATLAB.m} and the serial baseline with \texttt{serial/runBaselineSerial.sh}; the results are saved in the folder \texttt{reference}. A run passes if the number of time steps is the same and
+\begin{align*}
+\max_{N_x}\left|\mbox{maxErr}-\mbox{maxErr}_{\text{ref}}\right|<10^{-12}.
+\end{align*}
+
 \subsection{Serial version}
-$\bullet$ Results for constant coefficients with
-\begin{align*}
-	&a_x=0; \; b_x=1;\; a_y=0;\; b_y=1;\\
-	&\rho = 1; \quad  \bm{m}=\begin{bmatrix}
-		1 & 1\\
-		0 & 2
-	\end{bmatrix}.
-\end{align*}
-\textcolor{red}{Polynomial manufactured solution (we indeed get the ''exact" answer.)}
+The results below are the output of the serial baseline script. The four lines of each case are $N_x=N_y=20,\,40,\,80,\,160$ at the final time $t_{\text{final}}=0.5$, and \texttt{ratio} is the ratio of the errors on two successive grids.
+
+$\bullet$ Case 1: constant coefficients, poly (exact up to round-off)
 \begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
-wave2dSerial -nx=20 -tFinal=0.5 -debug=0
-nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
-CPU: numSteps=21 nx=20 maxNorm=1.53e+00 maxRelErr=3.62e-16 cpuTime= 0.00e+00(s)
-
-wave2dSerial -nx=40 -tFinal=0.5 -debug=0
-nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
-CPU: numSteps=41 nx=40 maxNorm=1.53e+00 maxRelErr=5.80e-16 cpuTime= 6.00e-03(s)
-
-wave2dSerial -nx=80 -tFinal=0.5 -debug=0
-nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
-CPU: numSteps=81 nx=80 maxNorm=1.53e+00 maxRelErr=8.70e-16 cpuTime= 3.90e-02(s)
-\end{Verbatim}
-\textcolor{red}{Trigonometric solution (we get second-order accuracy.)}
-\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
-wave2dSerial -nx=20 -tFinal=0.5 -debug=0
-nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
-CPU: numSteps=21 nx=20 maxNorm=3.00e+00 maxRelErr=2.34e-05 cpuTime= 0.00e+00(s)
-
-wave2dSerial -nx=40 -tFinal=0.5 -debug=0
-nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
-CPU: numSteps=41 nx=40 maxNorm=3.00e+00 maxRelErr=6.03e-06 cpuTime= 4.00e-03(s)
-
-wave2dSerial -nx=80 -tFinal=0.5 -debug=0
-nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
-CPU: numSteps=81 nx=80 maxNorm=3.00e+00 maxRelErr=1.53e-06 cpuTime= 2.80e-02(s)
+poly: Nt=  8 dt=6.25e-02 maxNorm=1.53e+00 maxRelErr=2.00e-16 cpuTime= 9.00e-05(s)
+poly: Nt= 16 dt=3.12e-02 maxNorm=1.53e+00 maxRelErr=2.68e-16 cpuTime= 1.79e-04(s) ratio=0.75
+poly: Nt= 32 dt=1.56e-02 maxNorm=1.53e+00 maxRelErr=4.46e-16 cpuTime= 1.79e-03(s) ratio=0.60
+poly: Nt= 63 dt=7.94e-03 maxNorm=1.53e+00 maxRelErr=7.19e-16 cpuTime= 9.89e-03(s) ratio=0.62
 \end{Verbatim}
 
-
-$\bullet$ Results for variable coefficients with
-\begin{align*}
-	&\rho(x,y) = \sin(x+y)+1.1; \quad  \bm{m}(x,y)=\begin{bmatrix}
-		a_{11}(x+y)+1 & 2\\
-		0 & a_{22}(2x+y)+2 %\nabla^2 \Delta
-	\end{bmatrix}.
-\end{align*}
-\textcolor{red}{Polynomial manufactured solution (we still get the ''exact" answer.)}
+$\bullet$ Case 2: constant coefficients, trig
 \begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
-wave2dSerial -nx=20 -tFinal=0.5 -debug=0
-nx=20 ny=20 dt=2.50e-02 numSteps=20 tFinal=  0.50
-CPU: numSteps=20 nx=20 maxNorm=1.53e+00 maxRelErr=1.27e-15 cpuTime= 1.00e-03(s)
-	
-wave2dSerial -nx=40 -tFinal=0.5 -debug=0
-nx=40 ny=40 dt=1.25e-02 numSteps=40 tFinal=  0.50
-CPU: numSteps=40 nx=40 maxNorm=1.53e+00 maxRelErr=1.74e-15 cpuTime= 8.00e-03(s)
-	
-wave2dSerial -nx=80 -tFinal=0.5 -debug=0
-nx=80 ny=80 dt=6.25e-03 numSteps=80 tFinal=  0.50
-CPU: numSteps=80 nx=80 maxNorm=1.53e+00 maxRelErr=8.26e-15 cpuTime= 6.10e-02(s)
+trig: Nt=  8 dt=6.25e-02 maxNorm=3.00e+00 maxRelErr=6.74e-04 cpuTime= 2.30e-05(s)
+trig: Nt= 16 dt=3.12e-02 maxNorm=3.00e+00 maxRelErr=1.75e-04 cpuTime= 1.01e-04(s) ratio=3.86
+trig: Nt= 32 dt=1.56e-02 maxNorm=3.00e+00 maxRelErr=4.47e-05 cpuTime= 6.25e-04(s) ratio=3.91
+trig: Nt= 63 dt=7.94e-03 maxNorm=3.00e+00 maxRelErr=1.16e-05 cpuTime= 4.22e-03(s) ratio=3.84
 \end{Verbatim}
+
+$\bullet$ Case 3: constant coefficients, pulse
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+pulse: Nt=  8 dt=6.25e-02 maxNorm=4.02e+00 maxRelErr=5.53e-03 cpuTime= 4.00e-05(s)
+pulse: Nt= 16 dt=3.12e-02 maxNorm=4.00e+00 maxRelErr=1.41e-03 cpuTime= 1.13e-04(s) ratio=3.93
+pulse: Nt= 32 dt=1.56e-02 maxNorm=4.00e+00 maxRelErr=3.50e-04 cpuTime= 7.24e-04(s) ratio=4.04
+pulse: Nt= 63 dt=7.94e-03 maxNorm=4.00e+00 maxRelErr=8.87e-05 cpuTime= 4.08e-03(s) ratio=3.95
+\end{Verbatim}
+
+$\bullet$ Case 4: constant coefficients, trigPulse
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+trigPulse: Nt=  8 dt=6.25e-02 maxNorm=2.02e+00 maxRelErr=8.88e-03 cpuTime= 4.10e-05(s)
+trigPulse: Nt= 16 dt=3.12e-02 maxNorm=2.00e+00 maxRelErr=2.20e-03 cpuTime= 1.15e-04(s) ratio=4.06
+trigPulse: Nt= 32 dt=1.56e-02 maxNorm=2.00e+00 maxRelErr=5.50e-04 cpuTime= 7.83e-04(s) ratio=4.01
+trigPulse: Nt= 63 dt=7.94e-03 maxNorm=2.00e+00 maxRelErr=1.39e-04 cpuTime= 4.35e-03(s) ratio=3.97
+\end{Verbatim}
+
+$\bullet$ Case 5: variable coefficients, poly
+\begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
+poly: Nt=102 dt=4.90e-03 maxNorm=1.53e+00 maxRelErr=4.18e-05 cpuTime= 5.56e-04(s)
+poly: Nt=204 dt=2.45e-03 maxNorm=1.53e+00 maxRelErr=1.04e-05 cpuTime= 3.72e-03(s) ratio=4.00
+poly: Nt=409 dt=1.22e-03 maxNorm=1.53e+00 maxRelErr=2.61e-06 cpuTime= 4.76e-02(s) ratio=4.00
+poly: Nt=817 dt=6.12e-04 maxNorm=1.53e+00 maxRelErr=6.53e-07 cpuTime= 3.73e-01(s) ratio=4.00
+\end{Verbatim}
+
+The serial code agrees with the MATLAB code (\texttt{matlab/anisotropicWave\_2D.m}) up to round-off:
+\begin{table}[H]\footnotesize
+\begin{center}
+\begin{tabular}{|c|c|c|c|} \hline
+Case & Coefficients & Solution & $\max|\mbox{maxErr}_{\text{C++}}-\mbox{maxErr}_{\text{MATLAB}}|$ \\ \hline
+1 & constant & poly      & $4.28\cdot 10^{-16}$ \\
+2 & constant & trig      & $2.44\cdot 10^{-15}$ \\
+3 & constant & pulse     & $2.22\cdot 10^{-15}$ \\
+4 & constant & trigPulse & $1.53\cdot 10^{-15}$ \\
+5 & variable & poly      & $2.10\cdot 10^{-15}$ \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
 \subsection { Parallel version}
+\textcolor{red}{Results from the old code (before the fixes); to be updated.}\\
 Here we are testing for polynomial manufactured solution with constant coefficients using 4 threads/processes. We observe that the errors are the same as those in the serial code.\\
 	$\bullet$ OpenMP code
 %			\begin{table}[H]\footnotesize 
@@ -265,6 +302,7 @@ np=4 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=8.70e-16 cpuTimeSt
 
 
 \section{Parallel speedup.}
+\textcolor{red}{Results from the old code (before the fixes); to be updated.}\\
 For testing speedup, we run the code on cg66 using $nx = ny = 2048$, $\mbox{tFinal=0.1}$. The serial code took 32.9 seconds to run. Here are the results for openMP and MPI versions.
 \begin{table}[H]\footnotesize 
 \begin{center}
