@@ -1,5 +1,6 @@
 // g++ -o wave2dSerial wave2dSerial.C
 // ./wave2dSerial -nx=80 -tFinal=0.5 -debug=0
+// ./wave2dSerial -nx=3000 -tFinal=0.1 -debug=0 (for testing speedup)
 // =====================================================================
 //
 // ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS
@@ -34,17 +35,30 @@ inline double getCPU()
 
 
 // Macros to use later
-#define x(i1,i2) x_p[0][(i1-nd1a)+nd1*(i2-nd2a)]
-#define y(i1,i2) x_p[1][(i1-nd1a)+nd1*(i2-nd2a)]
-#define up(i1,i2) u_p[prev][(i1-nd1a)+nd1*(i2-nd2a)]
-#define uc(i1,i2) u_p[cur ][(i1-nd1a)+nd1*(i2-nd2a)]
-#define un(i1,i2) u_p[next][(i1-nd1a)+nd1*(i2-nd2a)]
-#define err(i1,i2) errCPU_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define rho(i1,i2) rho_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m11(i1,i2) m11_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m12(i1,i2) m12_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m21(i1,i2) m21_p[(i1-nd1a)+nd1*(i2-nd2a)]
-#define m22(i1,i2) m22_p[(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define x(i1,i2) x_p[0][(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define y(i1,i2) x_p[1][(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define up(i1,i2) u_p[prev][(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define uc(i1,i2) u_p[cur ][(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define un(i1,i2) u_p[next][(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define err(i1,i2) errCPU_p[(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define rho(i1,i2) rho_p[(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define m11(i1,i2) m11_p[(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define m12(i1,i2) m12_p[(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define m21(i1,i2) m21_p[(i1-nd1a)+nd1*(i2-nd2a)]
+// [old] #define m22(i1,i2) m22_p[(i1-nd1a)+nd1*(i2-nd2a)]
+// Index of point (i1,i2): rows are stored with stride ld (padded, see below)
+#define IDX(i1,i2) ((i1)-nd1a+ld*((i2)-nd2a))
+#define x(i1,i2) x_p[0][IDX(i1,i2)]
+#define y(i1,i2) x_p[1][IDX(i1,i2)]
+#define up(i1,i2) u_p[prev][IDX(i1,i2)]
+#define uc(i1,i2) u_p[cur ][IDX(i1,i2)]
+#define un(i1,i2) u_p[next][IDX(i1,i2)]
+#define err(i1,i2) errCPU_p[IDX(i1,i2)]
+#define rho(i1,i2) rho_p[IDX(i1,i2)]
+#define m11(i1,i2) m11_p[IDX(i1,i2)]
+#define m12(i1,i2) m12_p[IDX(i1,i2)]
+#define m21(i1,i2) m21_p[IDX(i1,i2)]
+#define m22(i1,i2) m22_p[IDX(i1,i2)]
 
 // Function to allocate vectors
 void allocateVectors( 
@@ -101,8 +115,8 @@ int main(int argc, char *argv[])
 	#define CONS 1
 	#define VAR   2
 	#ifndef COEFF
-		#define COEFF CONS
-		// # define COEFF VAR
+		// #define COEFF CONS
+		# define COEFF VAR
 	#endif
 	
 	#if COEFF == CONS
@@ -203,7 +217,8 @@ int main(int argc, char *argv[])
 		#define FORCE(x, y, t)   (0.0)
 	#endif
 
-	const int numGhost = 0;  // use Dirichlet bc's
+// [old] 	const int numGhost = 0;  // use Dirichlet bc's
+	const int numGhost = 1;  // one ghost layer (same layout as the MPI code; not used here)
 	const int n1a  = 0;
 	const int n1b  = n1a + nx;
 	const int nd1a = n1a-numGhost;
@@ -215,7 +230,12 @@ int main(int argc, char *argv[])
 	const int nd2a = n2a-numGhost;
 	const int nd2b = n2b+numGhost;
 	const int nd2  = nd2b-nd2a+1;
-	const int nd   = nd1*nd2; // total number of grid points
+// [old] 	const int nd   = nd1*nd2; // total number of grid points
+	// Row stride: a multiple of 8 values (64 bytes), but not a multiple of 512 values (4 KB),
+	// to avoid cache conflicts between neighbouring rows
+	int ld = ((nd1 + 7)/8)*8;
+	if (ld % 512 == 0) ld += 8;
+	const int nd   = ld*nd2; // number of stored values per array
 	int i1, i2;
 	Real dx[2];
 	dx[0] = (xb-xa)/nx;
@@ -495,17 +515,26 @@ void allocateVectors(
 			double** m22_p,
 			int nd){
 	
-	*x_p    = new double [nd];
-	*y_p    = new double [nd];
-	*up_p   = new double [nd];
-	*un_p   = new double [nd];
-	*uc_p   = new double [nd];
-	*errCPU = new double [nd];
-	*rho_p  = new double [nd];
-	*m11_p  = new double [nd];
-	*m12_p  = new double [nd];
-	*m21_p  = new double [nd];
-	*m22_p  = new double [nd];
+// [old] 	*x_p    = new double [nd];
+// [old] 	*y_p    = new double [nd];
+// [old] 	*up_p   = new double [nd];
+// [old] 	*un_p   = new double [nd];
+// [old] 	*uc_p   = new double [nd];
+// [old] 	*errCPU = new double [nd];
+// [old] 	*rho_p  = new double [nd];
+// [old] 	*m11_p  = new double [nd];
+// [old] 	*m12_p  = new double [nd];
+// [old] 	*m21_p  = new double [nd];
+// [old] 	*m22_p  = new double [nd];
+	// All 11 arrays in one block. Array k starts at k*slot, where slot is nd rounded up to a
+	// multiple of 512 values (4 KB) plus 520 values: the arrays then start at different
+	// offsets within a page, so the same point (i1,i2) of different arrays does not map to
+	// the same cache set (this made the code about 2 times slower).
+	const int slot = ((nd + 511)/512)*512 + 520;
+	double *block = new double [11*(size_t)slot];
+	double **arrays[11] = {x_p, y_p, up_p, un_p, uc_p, errCPU, rho_p, m11_p, m12_p, m21_p, m22_p};
+	for (int k = 0; k < 11; k++)
+		*arrays[k] = block + k*(size_t)slot;
 	
 }
 // Function to free all allocated vectors
@@ -517,15 +546,16 @@ void freeVectors(
 			double* m12_p, double* m21_p,
 			double* m22_p){
 	
-	delete [] x_p;
-	delete [] y_p;
-	delete [] up_p;
-	delete [] un_p;
-	delete [] uc_p;
-	delete [] errCPU_p;
-	delete [] rho_p;
-	delete [] m11_p;
-	delete [] m12_p;
-	delete [] m21_p;
-	delete [] m22_p;
+// [old] 	delete [] x_p;
+// [old] 	delete [] y_p;
+// [old] 	delete [] up_p;
+// [old] 	delete [] un_p;
+// [old] 	delete [] uc_p;
+// [old] 	delete [] errCPU_p;
+// [old] 	delete [] rho_p;
+// [old] 	delete [] m11_p;
+// [old] 	delete [] m12_p;
+// [old] 	delete [] m21_p;
+// [old] 	delete [] m22_p;
+	delete [] x_p; // x_p is the start of the block that holds all arrays
 }

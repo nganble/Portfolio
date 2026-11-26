@@ -1,12 +1,12 @@
 # OpenMP timing: const poly, nx=3000, tFinal=0.1, numSteps=236, best of 3 runs
 # machine=mac  cpu=Apple M3 Pro (5P+6E cores)
-# compiler=g++-16 (Homebrew GCC 16.2.0) 16.2.0  flags=-O3  commit=0f4424a-modified  date=2026-11-26
+# compiler=g++-16 (Homebrew GCC 16.2.0) 16.2.0  flags=-O3  commit=462c160-modified  date=2026-11-26
 # S_ser, E_ser: relative to the serial code;  S_1, E_1: relative to openmp with threads=1
 code     threads  min(s)      median(s)   S_ser   E_ser   S_1     E_1    
-serial   1        9.370e+00   9.540e+00   1.00    1.00    -       -      
-openmp   1        9.800e+00   9.880e+00   0.96    0.96    1.00    1.00   
-openmp   2        4.950e+00   4.950e+00   1.89    0.95    1.98    0.99   
-openmp   4        2.640e+00   2.680e+00   3.55    0.89    3.71    0.93   
-openmp   5        2.310e+00   2.350e+00   4.06    0.81    4.24    0.85   
-openmp   8        2.210e+00   2.300e+00   4.24    0.53    4.43    0.55   
-openmp   10       1.990e+00   2.040e+00   4.71    0.47    4.92    0.49   
+serial   1        5.770e+00   5.790e+00   1.00    1.00    -       -      
+openmp   1        5.690e+00   5.730e+00   1.01    1.01    1.00    1.00   
+openmp   2        2.950e+00   2.950e+00   1.96    0.98    1.93    0.96   
+openmp   4        1.790e+00   1.790e+00   3.22    0.81    3.18    0.79   
+openmp   5        1.720e+00   1.740e+00   3.35    0.67    3.31    0.66   
+openmp   8        1.690e+00   1.690e+00   3.41    0.43    3.37    0.42   
+openmp   10       1.660e+00   1.710e+00   3.48    0.35    3.43    0.34   

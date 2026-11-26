@@ -50,17 +50,30 @@ inline double getCPU()
 
 
 // Macros to use later
-#define x(i1,i2) x_p[0][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define y(i1,i2) x_p[1][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define up(i1,i2) u_p[prev][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define uc(i1,i2) u_p[cur ][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define un(i1,i2) u_p[next][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define err(i1,i2) errCPU_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define rho(i1,i2) rho_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m11(i1,i2) m11_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m12(i1,i2) m12_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m21(i1,i2) m21_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m22(i1,i2) m22_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define x(i1,i2) x_p[0][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define y(i1,i2) x_p[1][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define up(i1,i2) u_p[prev][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define uc(i1,i2) u_p[cur ][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define un(i1,i2) u_p[next][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define err(i1,i2) errCPU_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define rho(i1,i2) rho_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define m11(i1,i2) m11_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define m12(i1,i2) m12_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define m21(i1,i2) m21_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// [old] #define m22(i1,i2) m22_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
+// Index of point (i1,i2) in the local arrays: rows are stored with stride ld (padded, see below)
+#define IDX(i1, i2) ((i1) - nd1a + ld * ((i2) - nd2a_l))
+#define x(i1,i2) x_p[0][IDX(i1, i2)]
+#define y(i1,i2) x_p[1][IDX(i1, i2)]
+#define up(i1,i2) u_p[prev][IDX(i1, i2)]
+#define uc(i1,i2) u_p[cur ][IDX(i1, i2)]
+#define un(i1,i2) u_p[next][IDX(i1, i2)]
+#define err(i1,i2) errCPU_p[IDX(i1, i2)]
+#define rho(i1,i2) rho_p[IDX(i1, i2)]
+#define m11(i1,i2) m11_p[IDX(i1, i2)]
+#define m12(i1,i2) m12_p[IDX(i1, i2)]
+#define m21(i1,i2) m21_p[IDX(i1, i2)]
+#define m22(i1,i2) m22_p[IDX(i1, i2)]
 
 
 // Function to allocate vectors
@@ -279,7 +292,12 @@ int main(int argc, char *argv[])
 	const int nd2a = n2a - numGhost;
 	const int nd2b = n2b + numGhost;
 	const int nd2  = nd2b - nd2a + 1;
-	const int nd   = nd1 * nd2; // total number of grid points
+// [old] 	const int nd   = nd1 * nd2; // total number of grid points
+	// Row stride: a multiple of 8 values (64 bytes), but not a multiple of 512 values (4 KB),
+	// to avoid cache conflicts between neighbouring rows (used for the local and the global arrays)
+	int ld = ((nd1 + 7)/8)*8;
+	if (ld % 512 == 0) ld += 8;
+	const int nd   = ld * nd2; // number of stored values of a global array
 	int i1, i2;
 	Real dx[2];
 	dx[0] = (xb - xa) / nx;
@@ -291,7 +309,8 @@ int main(int argc, char *argv[])
 	const int nd2a_l = n2a_l - numGhost;
 	const int nd2b_l = n2b_l + numGhost;
 	const int nd2_l  = nd2b_l - nd2a_l+1;
-	const int nd_l   = nd1 * nd2_l; // total number of local grid points
+// [old] 	const int nd_l   = nd1 * nd2_l; // total number of local grid points
+	const int nd_l   = ld * nd2_l; // number of stored values of a local array
 
 	/*
 	int *boundaryCondition_p = new int[2 * numberOfDimensions];
@@ -786,10 +805,14 @@ int main(int argc, char *argv[])
 		Real *ug_p = new Real[nd];
 		// Allocate space to hold error
 		Real *errg_p = new Real[nd];
-		#define xg(i1, i2) xg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
-		#define yg(i1, i2) yg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
-		#define ug(i1, i2) ug_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
-		#define errg(i1, i2) errg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+		// [old] #define xg(i1, i2) xg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+		#define xg(i1, i2) xg_p[(i1 - nd1a) + ld * (i2 - nd2a)]
+		// [old] #define yg(i1, i2) yg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+		#define yg(i1, i2) yg_p[(i1 - nd1a) + ld * (i2 - nd2a)]
+		// [old] #define ug(i1, i2) ug_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+		#define ug(i1, i2) ug_p[(i1 - nd1a) + ld * (i2 - nd2a)]
+		// [old] #define errg(i1, i2) errg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+		#define errg(i1, i2) errg_p[(i1 - nd1a) + ld * (i2 - nd2a)]
 		// Copy the local data on rank 0 to the global arrays
 		for (i2=nd2a_l; i2<=nd2b_l; i2++)
 		{
@@ -810,9 +833,11 @@ int main(int argc, char *argv[])
 			// printf("rank=%d: ny_l=%d, n2a_l=%d, n2b_l=%d\n", rank, ny_local, n2a_local, n2b_local);
 			int dataLen;
 			if (rank < np-1)
-				dataLen = nd1*(ny_local+1);
+				// [old] dataLen = nd1*(ny_local+1);
+				dataLen = ld*(ny_local+1);
 			else
-				dataLen = nd1*(ny_local+2); // Include the ghost point on the right for rank = np-1
+				// [old] dataLen = nd1*(ny_local+2); // Include the ghost point on the right for rank = np-1
+				dataLen = ld*(ny_local+2); // Include the ghost point on the right for rank = np-1
 			// Receive data from other rank
 			MPI_Recv(&(xg(nd1a,n2a_local)), dataLen, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			MPI_Recv(&(yg(nd1a,n2a_local)), dataLen, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -848,10 +873,14 @@ int main(int argc, char *argv[])
 
 			if (saveMatlab > 1)
 			{
-				writeMatlabArray( matlabFile, xg_p, "x", nd1a, nd1b, nd2a, nd2b);
-				writeMatlabArray( matlabFile, yg_p, "y", nd1a, nd1b, nd2a, nd2b);
-				writeMatlabArray( matlabFile, ug_p, "u", nd1a, nd1b, nd2a, nd2b);
-				writeMatlabArray( matlabFile, errg_p, "err", nd1a, nd1b, nd2a, nd2b);
+				// [old] writeMatlabArray( matlabFile, xg_p, "x", nd1a, nd1b, nd2a, nd2b);
+				writeMatlabArray( matlabFile, xg_p, "x", nd1a, nd1b, nd2a, nd2b, ld);
+				// [old] writeMatlabArray( matlabFile, yg_p, "y", nd1a, nd1b, nd2a, nd2b);
+				writeMatlabArray( matlabFile, yg_p, "y", nd1a, nd1b, nd2a, nd2b, ld);
+				// [old] writeMatlabArray( matlabFile, ug_p, "u", nd1a, nd1b, nd2a, nd2b);
+				writeMatlabArray( matlabFile, ug_p, "u", nd1a, nd1b, nd2a, nd2b, ld);
+				// [old] writeMatlabArray( matlabFile, errg_p, "err", nd1a, nd1b, nd2a, nd2b);
+				writeMatlabArray( matlabFile, errg_p, "err", nd1a, nd1b, nd2a, nd2b, ld);
 			}
 			fclose(matlabFile);
 			printf("Wrote file [%s]\n",matlabFileName.c_str());
@@ -867,9 +896,11 @@ int main(int argc, char *argv[])
 		// All ranks other than 0 must send their interior data to rank 0
 		int dataLen;
 		if (myRank < np-1)
-			dataLen = nd1*(ny_l+1);
+			// [old] dataLen = nd1*(ny_l+1);
+			dataLen = ld*(ny_l+1);
 		else
-			dataLen = nd1*(ny_l+2);
+			// [old] dataLen = nd1*(ny_l+2);
+			dataLen = ld*(ny_l+2);
 		MPI_Send(&(x(nd1a,n2a_l)), dataLen, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&(y(nd1a,n2a_l)), dataLen, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&(uc(nd1a,n2a_l)), dataLen, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
@@ -907,17 +938,26 @@ void allocateVectors(
 			double** m22_p,
 			int nd){
 	
-	*x_p    = new double [nd];
-	*y_p    = new double [nd];
-	*up_p   = new double [nd];
-	*un_p   = new double [nd];
-	*uc_p   = new double [nd];
-	*errCPU = new double [nd];
-	*rho_p  = new double [nd];
-	*m11_p  = new double [nd];
-	*m12_p  = new double [nd];
-	*m21_p  = new double [nd];
-	*m22_p  = new double [nd];	
+// [old] 	*x_p    = new double [nd];
+// [old] 	*y_p    = new double [nd];
+// [old] 	*up_p   = new double [nd];
+// [old] 	*un_p   = new double [nd];
+// [old] 	*uc_p   = new double [nd];
+// [old] 	*errCPU = new double [nd];
+// [old] 	*rho_p  = new double [nd];
+// [old] 	*m11_p  = new double [nd];
+// [old] 	*m12_p  = new double [nd];
+// [old] 	*m21_p  = new double [nd];
+// [old] 	*m22_p  = new double [nd];	
+	// All 11 arrays in one block. Array k starts at k*slot, where slot is nd rounded up to a
+	// multiple of 512 values (4 KB) plus 520 values: the arrays then start at different
+	// offsets within a page, so the same point (i1,i2) of different arrays does not map to
+	// the same cache set (this made the code about 2 times slower).
+	const int slot = ((nd + 511)/512)*512 + 520;
+	double *block = new double [11*(size_t)slot];
+	double **arrays[11] = {x_p, y_p, up_p, un_p, uc_p, errCPU, rho_p, m11_p, m12_p, m21_p, m22_p};
+	for (int k = 0; k < 11; k++)
+		*arrays[k] = block + k*(size_t)slot;
 }
 
 // Function to free all allocated vectors
@@ -929,15 +969,16 @@ void freeVectors(
 			double* m12_p, double* m21_p,
 			double* m22_p){
 	
-	delete [] x_p;
-	delete [] y_p;
-	delete [] up_p;
-	delete [] un_p;
-	delete [] uc_p;
-	delete [] errCPU_p;
-	delete [] rho_p;
-	delete [] m11_p;
-	delete [] m12_p;
-	delete [] m21_p;
-	delete [] m22_p;
+// [old] 	delete [] x_p;
+// [old] 	delete [] y_p;
+// [old] 	delete [] up_p;
+// [old] 	delete [] un_p;
+// [old] 	delete [] uc_p;
+// [old] 	delete [] errCPU_p;
+// [old] 	delete [] rho_p;
+// [old] 	delete [] m11_p;
+// [old] 	delete [] m12_p;
+// [old] 	delete [] m21_p;
+// [old] 	delete [] m22_p;
+	delete [] x_p; // x_p is the start of the block that holds all arrays
 }

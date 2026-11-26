@@ -5,9 +5,12 @@
 // Save an array to a matlab file.
 // ------------------------------------------------------------------------------------
 
-int writeMatlabArray(FILE *matlabFile, Real *u_p, const char *name, int nd1a, int nd1b, int nd2a, int nd2b)
+// [old] int writeMatlabArray(FILE *matlabFile, Real *u_p, const char *name, int nd1a, int nd1b, int nd2a, int nd2b)
+// ld = row stride of u_p in memory (ld >= nd1b-nd1a+1, rows may be padded)
+int writeMatlabArray(FILE *matlabFile, Real *u_p, const char *name, int nd1a, int nd1b, int nd2a, int nd2b, int ld)
 {
-	#define u(i1, i2) u_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+	// [old] 	#define u(i1, i2) u_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+	#define u(i1, i2) u_p[(i1 - nd1a) + ld * (i2 - nd2a)]
 	const int nd1 = nd1b-nd1a+1;
 	const int nd2 = nd2b-nd2a+1;
 
