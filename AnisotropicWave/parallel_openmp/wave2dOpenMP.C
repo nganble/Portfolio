@@ -1,4 +1,4 @@
-// g++-14 -fopenmp -o wave2dOpenMp wave2dOpenMP.C
+// g++ -fopenmp -o wave2dOpenMp wave2dOpenMP.C
 // ./wave2dOpenMP -nx=512 -tFinal=0.1 -numThreads=1 -debug=0
 // ./wave2dOpenMP -nx=80 -tFinal=0.1 -numThreads=1 -debug=0
 // ./wave2dOpenMP -nx=3072 -tFinal=0.05 -numThreads=10 -debug=0
@@ -82,14 +82,14 @@ int main(int argc, char *argv[])
 	const int numberOfDimensions = 2;
 	int debug = 0;
 	// Real kappa = .1;
-	Real xa = 0.0, xb = 1.0; // domain is [xa,xb] X [ya,yb]
-	Real ya = 0.0, yb = 1.0;
+	Real xa = -1.0, xb = 1.0; // domain is [xa,xb] X [ya,yb]
+	Real ya = -1.0, yb = 1.0;
 
 	Real tFinal = 0.5;
 	Real cfl = 0.9;
 	int nx = 100, ny = nx;
 	int saveMatlab = 0; // 1 = save a matlab file, 2 = save solution too
-	string matlabFileName = "wave2d.m";
+	string matlabFileName = "anisotropicWave2DOpenMP.m";
 	int numThreads = 2; // number of threads for computing in parallel
 
 	string line;
@@ -115,29 +115,31 @@ int main(int argc, char *argv[])
 	#endif
 	
 	#if COEFF == CONS
+		const char *coeffName = "const";
 		#define RHO(x, y)   (1.0)
 		#define M11(x, y)   (1.0)
 		#define M11x(x, y)  (0.0)
-		#define M12(x, y)   (1.0)
+		#define M12(x, y)   (0.0)
 		#define M12x(x, y)  (0.0)
 		#define M21(x, y)   (0.0)
 		#define M21y(x, y)  (0.0)
-		#define M22(x, y)   (2.0)
+		#define M22(x, y)   (1.0)
 		#define M22y(x, y)  (0.0)
 
 	#elif COEFF == VAR
+		const char *coeffName = "var";
+		// symmetric (m12 = m21) and positive definite on (-1,1)^2
 		const Real a11 = 0.3;
 		const Real a12 = 0.2;
-		const Real a21 = 0.0;
 		const Real a22 = 0.6;
-		#define RHO(x, y)  (1.0 * sin((x) + (y)) + 1.1)
-		#define M11(x, y)  (a11 * ((x) + (y)) + 1.0)
+		#define RHO(x, y)  (0.1 * (sin((x) + (y)) + 1.1))
+		#define M11(x, y)  (a11 * ((x) + (y)) + 2.0)
 		#define M11x(x, y) (a11)
-		#define M12(x, y)  (0.0)
-		#define M12x(x, y) (0.0)
-		#define M21(x, y)  (2.0)
-		#define M21y(x, y) (0.0)
-		#define M22(x, y)  (a22 * (2.0 * (x) + (y)) + 2.0)
+		#define M12(x, y)  (0.5 + a12 * ((x) + (y)))
+		#define M12x(x, y) (a12)
+		#define M21(x, y)  (M12(x, y))
+		#define M21y(x, y) (a12)
+		#define M22(x, y)  (a22 * (2.0 * (x) + (y)) + 3.0)
 		#define M22y(x, y) (a22)
 
 	#endif
@@ -148,19 +150,23 @@ int main(int argc, char *argv[])
 	#define PULSE 3
 	#define PULSETRIG 4
 	#ifndef SOLUTION
-		//#define SOLUTION TRIG
 		#define SOLUTION POLY
+		// #define SOLUTION TRIG
+		// #define SOLUTION PULSE
+		// #define SOLUTION PULSETRIG
 	#endif
 
 	#if SOLUTION == TRIG
+		const char *msName = "trig";
 		const Real kx = 1;
-		const Real ky = 0;
+		const Real ky = 1;
 		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
 														M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
 		#define UTRUE(x, y, t)   (3.0 * cos(kx * (x) + ky * (y) - omega * (t)))
 		#define UTRUET(x, y, t)  (3.0 * omega * sin(kx * (x) + ky * (y) - omega * (t)))
 		#define FORCE(x, y, t)   (0.0)
 	#elif SOLUTION == POLY
+		const char *msName = "poly";
 		// Coefficients for manufactured solution
 		static const Real a0 = .5, a1 = .7, a2 = .9;  // Time coefficients
 		static const Real b0 = .5, b1 = .8, b2 = .6;  // Space coefficients in x
@@ -178,6 +184,32 @@ int main(int argc, char *argv[])
 												 	 (M12(x, y) + M21(x, y)) * UTRUEXY(x, y, t) - \
 												 	 (M11x(x, y) + M21y(x, y)) * UTRUEX(x, y, t) - \
 												 	 (M12x(x, y) + M22y(x, y)) * UTRUEY(x, y, t))
+	#elif SOLUTION == PULSE
+		const char *msName = "pulse";
+		// Gaussian pulse: u = 4 exp(-beta s^2), s = kx x + ky y - omega t
+		const Real kx = 1;
+		const Real ky = 1;
+		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
+								M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
+		#define PHASE(x, y, t)  (kx * (x) + ky * (y) - omega * (t))
+		const Real beta = 3.0;
+		#define UTRUE(x, y, t)   (4.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)))
+		#define UTRUET(x, y, t)  (2.0 * beta * omega * PHASE(x, y, t) * UTRUE(x, y, t))
+		#define FORCE(x, y, t)   (0.0)
+	#elif SOLUTION == PULSETRIG
+		const char *msName = "trigPulse";
+		// Modulated pulse: u = 2 exp(-beta s^2) cos(kn s), s = kx x + ky y - omega t
+		const Real kx = 1;
+		const Real ky = 1;
+		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
+								M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
+		#define PHASE(x, y, t)  (kx * (x) + ky * (y) - omega * (t))
+		const Real beta = 2.5;
+		const Real kn = 2.0;
+		#define UTRUE(x, y, t)   (2.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)) * cos(kn * PHASE(x, y, t)))
+		#define UTRUET(x, y, t)  (2.0 * beta * omega * PHASE(x, y, t) * UTRUE(x, y, t) + \
+								 kn * omega * 2.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)) * sin(kn * PHASE(x, y, t)))
+		#define FORCE(x, y, t)   (0.0)
 	#endif
 
 	const int numGhost = 0;  // use Dirichlet bc's
@@ -261,7 +293,7 @@ int main(int argc, char *argv[])
 		for (i1 = n1a; i1 <= n1b; i1++)
 		{
 			Real ind = sqrt(rho(i1,i2)) / sqrt( m11(i1,i2) / (dx[0] * dx[0])
-									+ (m12(i1,i2) + m21(i1,i2))/(4 * dx[0] * dx[1])
+									+ fabs(m12(i1,i2) + m21(i1,i2))/(4 * dx[0] * dx[1])
 									+ m22(i1,i2) / (dx[1] * dx[1]) );
 			// printf("min[%d,%d]=%4.5f\n", i1, i2,ind);
 			dt = min(dt, ind);
@@ -294,10 +326,10 @@ int main(int argc, char *argv[])
 			    ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * up(i1 + 1, i2) -
 					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * up(i1, i2) +
 					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * up(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (0.5 * (m12(i1 + 1, i2) + m12(i1, i2)) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
-					  0.5 * (m12(i1 - 1, i2) + m12(i1, i2)) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m21(i1, i2 + 1) + m21(i1, i2)) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
-					  0.5 * (m21(i1, i2 - 1) + m21(i1, i2)) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m12(i1 + 1, i2) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
+					  m12(i1 - 1, i2) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m21(i1, i2 + 1) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
+					  m21(i1, i2 - 1) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
 			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * up(i1, i2 + 1) -
 					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * up(i1, i2) +
 					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * up(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
@@ -340,6 +372,8 @@ int main(int argc, char *argv[])
 	printf("----- Solving Anisotropic Wave Equation in two dimensions using openMP------\n");
 	printf(" saveMatlab=%d, matlabFileName=%s \n",saveMatlab,matlabFileName.c_str());
 	printf(" nx=%d ny=%d dt=%6.2e numSteps=%d tFinal=%6.2f\n", nx, ny,dt, numSteps, tFinal);
+	printf(" coeffs=%s, ms=%s, domain=[%g,%g]x[%g,%g], cfl=%4.2f, tFinal=%4.2f, numThreads=%d\n",
+			coeffName, msName, xa, xb, ya, yb, cfl, tFinal, numThreads);
 
 	// ---------------------------- TIME-STEPPING LOOP ------------------------------
 	Real cpu1 = getCPU();
@@ -362,10 +396,10 @@ int main(int argc, char *argv[])
 					((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -
 					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * uc(i1, i2) +
 					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * uc(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (0.5 * (m12(i1 + 1, i2) + m12(i1, i2)) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
-					  0.5 * (m12(i1 - 1, i2) + m12(i1, i2)) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m21(i1, i2 + 1) + m21(i1, i2)) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
-					  0.5 * (m21(i1, i2 - 1) + m21(i1, i2)) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m12(i1 + 1, i2) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
+					  m12(i1 - 1, i2) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m21(i1, i2 + 1) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
+					  m21(i1, i2 - 1) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
 			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * uc(i1, i2 + 1) -
 					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * uc(i1, i2) +
 					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * uc(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
@@ -432,9 +466,13 @@ int main(int argc, char *argv[])
 	}
 	// End parallel
 
-	maxErr = maxErr/maxNorm;
-	printf("CPU: numSteps=%d nx=%d maxNorm=%8.2e maxRelErr=%8.2e cpuTime=%9.2e(s)\n",
-					numSteps, nx, maxNorm, maxErr, cpuTimeStep);
+	Real maxRelErr = maxErr/maxNorm;
+	// Same format as MATLAB (anisotropicWave_2D.m), plus the cpu time
+	printf("%s: t=%4.2f Nx=%3d Ny=%3d Nt=%3d dt=%8.2e maxNorm=%8.2e maxRelErr=%8.2e cpuTime=%9.2e(s)\n",
+			msName, tFinal, nx, ny, numSteps, dt, maxNorm, maxRelErr, cpuTimeStep);
+	// Full precision for the baseline comparison with MATLAB (errMax, relErr)
+	printf("BASELINE: coeffs=%s ms=%s nx=%d numSteps=%d dt=%.16e maxErr=%.16e maxRelErr=%.16e\n",
+			coeffName, msName, nx, numSteps, dt, maxErr, maxRelErr);
 
 	// Free allocated vectors
 	// delete [] gridIndex_p;

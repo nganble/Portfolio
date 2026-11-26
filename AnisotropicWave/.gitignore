@@ -1,6 +1,7 @@
 # compiled binaries
 serial/wave2dSerial
 parallel_openmp/wave2dOpenMp
+parallel_openmp/wave2dOpenMP
 parallel_mpi/wave2dMPI
 *.exe
 *.o
