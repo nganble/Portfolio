@@ -106,6 +106,14 @@ and we write $f_{ij}^n=f(x_i,y_j,t^n)$, $\rho_{ij}=\rho(x_i,y_j)$. The second-or
 L_h W_{ij} ={}& D_{+x}\left[M^{11}_{i-1/2,j}D_{-x}W_{ij}\right]+D_{+y}\left[M^{22}_{i,j-1/2}D_{-y}W_{ij}\right] \notag\\
 & + D_{0x}\left[M^{12}_{ij}D_{0y}W_{ij}\right]+D_{0y}\left[M^{21}_{ij}D_{0x}W_{ij}\right]. \label{eq:2DAnisotropicLh}
 \end{align}
+\textcolor{red}{\textbf{Note (current C++ code, wrong):} the C++ codes (serial, OpenMP, MPI) average the off-diagonal coefficients to the half grid points but keep the differences at $i\pm1$ and $j\pm1$,
+\begin{align*}
+& \dfrac{1}{2\Delta x}\left[M^{12}_{i+1/2,j}D_{0y}W_{i+1,j} - M^{12}_{i-1/2,j}D_{0y}W_{i-1,j}\right] \\
+& + \dfrac{1}{2\Delta y}\left[M^{21}_{i,j+1/2}D_{0x}W_{i,j+1} - M^{21}_{i,j-1/2}D_{0x}W_{i,j-1}\right], \\
+& M^{12}_{i\pm1/2,j} = \dfrac{m_{12}(x_{i\pm1},y_j)+m_{12}(x_i,y_j)}{2}, \quad M^{21}_{i,j\pm1/2} = \dfrac{m_{21}(x_i,y_{j\pm1})+m_{21}(x_i,y_j)}{2}.
+\end{align*}
+This is inconsistent when $m_{12}$ depends on $x$ (or $m_{21}$ on $y$): for $m_{12}=x$ and $D_{0y}W=1$ it gives $(M^{12}_{i+1/2,j}-M^{12}_{i-1/2,j})/(2\Delta x)=1/2$ instead of $\partial_x m_{12}=1$. To be replaced by the pointwise form in~\eqref{eq:2DAnisotropicLh}.}
+
 The explicit scheme for~\eqref{eq:2DAnisotropicWaveEquation} is given by
 \begin{subequations}
 \label{eq:explicitScheme}

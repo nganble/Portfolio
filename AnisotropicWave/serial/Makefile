@@ -1,30 +1,21 @@
-#
-# THIS IS THE MAKE FILE FOR SERIAL CODE:
-#
-#
+# Makefile for the serial anisotropic wave solver
+# Usage: make | make clean | make CXX=clang++ (override the compiler)
+
+CXX= g++
+CXXFLAGS = -O3 -Wall
+
 
 # First target is made by default when using "make", traditionally named "all"
-all = wave2dSerial
+all: wave2dSerial
+
+wave2dSerial: wave2dSerial.o
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+wave2dSerial.o: wave2dSerial.C parseCommand.h
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 
-# Set names of compilers once in case we need to change them
-CC = gcc
-#CXX = g++
+clean:
+	rm -f *.o wave2dSerial
 
-# For parallel computing
-CXX = g++
-
-opt = -O3
-
-# implicit (generic) rule to compile .C files
-# $@ = file name of the target
-# $< = name of the first prerequisite
-%.o : %.C
-	$(CXX) $(opt) -o $@ -c $<
-
-#using open MP
-wave2dSerialFiles = wave2dSerial.o
-wave2dSerial: $(wave2dSerialFiles)
-	$(CXX) $(opt) -o $@ $(wave2dSerialFiles) $(LIBS)
-
-clean:; rm *.o
+.PHONY: all clean

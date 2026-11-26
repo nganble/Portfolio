@@ -12,7 +12,7 @@
 if ~exist('cases','var')        % standalone run: set the case here
     clc;
     ms      = "gauss";           % 'poly' | 'trig' | 'pulse' | 'trigPulse' | 'gauss' | 'gaussForce'
-    coeffs  = "const";          % 'const' | 'var' | 'piecewise'
+    coeffs  = "piecewise";          % 'const' | 'var' | 'piecewise'
     saveRef = false;            % true: write reference, false: compare
 end
 clearvars -except ms coeffs saveRef cases nCases k pass
@@ -28,7 +28,7 @@ ky = 1;
 
 
 plotSol = false;
-makeMovie = 1;  % 0=no movie (convergence test) | 1=make movie | 2=save movie too
+makeMovie = 0;  % 0=no movie (convergence test) | 1=make movie | 2=save movie too
 topView = "on"; % 'on' | 'off'
 if (makeMovie==0)
     tFinal=.5;
@@ -48,7 +48,7 @@ else
             tFinal = 10;
         end
     else
-        tFinal = 1;
+        tFinal = 1.2;
     end
     
 end
@@ -468,6 +468,15 @@ if (makeMovie==0 && ~startsWith(ms,"gauss") && (strcmp(coeffs,"const")||strcmp(m
         if ~exist(refDir,'dir'), mkdir(refDir); end
         save(refFile, 'ms','coeffs','NxList','NtList','dtList','errMax','relErr','tFinal','cfl');
         fprintf('Saved %s\n', refFile);
+        % Same values as text (BASELINE format of the C++ codes), for runBaselineSerial.sh
+        txtFile = strrep(refFile, '.mat', '.txt');
+        fid = fopen(txtFile, 'w');
+        for i = startInd:numResolutions
+            fprintf(fid, 'BASELINE: coeffs=%s ms=%s nx=%d numSteps=%d dt=%.16e maxErr=%.16e maxRelErr=%.16e\n', ...
+                    coeffs, ms, NxList(i), NtList(i), dtList(i), errMax(i), relErr(i));
+        end
+        fclose(fid);
+        fprintf('Saved %s\n', txtFile);
     elseif exist(refFile,'file')
         ref = load(refFile);
         d   = max(abs(errMax - ref.errMax));
