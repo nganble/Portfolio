@@ -39,6 +39,8 @@ using std::min;
 #include "../common/grid.h"
 // L_h (the spatial operator) as the macro LH(u, i1, i2)
 #include "../common/stencil.h"
+// printCase, printResults (header and result lines)
+#include "../common/output.h"
 
 int main(int argc, char *argv[])
 {
@@ -256,8 +258,7 @@ int main(int argc, char *argv[])
 	printf("----- Solving Anisotropic Wave Equation in two dimensions ------\n");
 	printf(" saveMatlab=%d, matlabFileName=%s \n",saveMatlab,matlabFileName.c_str());
 	printf(" nx=%d ny=%d dt=%6.2e numSteps=%d tFinal=%6.2f\n", nx, ny,dt, numSteps, tFinal);
-	printf(" coeffs=%s, ms=%s, domain=[%g,%g]x[%g,%g], cfl=%4.2f, tFinal=%4.2f\n",
-			coeffName, msName, xa, xb, ya, yb, cfl, tFinal);
+	printCase(stdout, coeffName, msName, xa, xb, ya, yb, cfl, tFinal); // moved to common/output.h
 
 	// ---------------------------- TIME-STEPPING LOOP ------------------------------
 	Real cpu1 = getCPU();
@@ -345,12 +346,8 @@ int main(int argc, char *argv[])
 		}
 	}
 	Real maxRelErr = maxErr/maxNorm;
-	// Same format as MATLAB (anisotropicWave_2D.m), plus the cpu time
-	printf("%s: t=%4.2f Nx=%3d Ny=%3d Nt=%3d dt=%8.2e maxNorm=%8.2e maxRelErr=%8.2e cpuTime=%9.2e(s)\n",
-			msName, tFinal, nx, ny, numSteps, dt, maxNorm, maxRelErr, cpuTimeStep);
-	// Full precision for the baseline comparison with MATLAB (errMax, relErr)
-	printf("BASELINE: coeffs=%s ms=%s nx=%d numSteps=%d dt=%.16e maxErr=%.16e maxRelErr=%.16e\n",
-			coeffName, msName, nx, numSteps, dt, maxErr, maxRelErr);
+	// Result lines: moved to common/output.h
+	printResults(coeffName, msName, tFinal, nx, ny, numSteps, dt, maxNorm, maxErr, maxRelErr, cpuTimeStep);
 
 	
 

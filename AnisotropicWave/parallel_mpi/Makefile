@@ -9,7 +9,7 @@ all: wave2dMPI
 wave2dMPI: wave2dMPI.o
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-wave2dMPI.o: wave2dMPI.C ../common/parseCommand.h ../common/getCPU.h ../common/testCases.h ../common/grid.h ../common/stencil.h getLocalIndexBounds.h writeMatlabArray.h
+wave2dMPI.o: wave2dMPI.C ../common/parseCommand.h ../common/getCPU.h ../common/testCases.h ../common/grid.h ../common/stencil.h ../common/output.h getLocalIndexBounds.h writeMatlabArray.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
