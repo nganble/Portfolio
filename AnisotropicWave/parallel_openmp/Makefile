@@ -14,7 +14,7 @@ all: wave2dOpenMP
 wave2dOpenMP: wave2dOpenMP.o
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-wave2dOpenMP.o: wave2dOpenMP.C parseCommand.h getCPU.h
+wave2dOpenMP.o: wave2dOpenMP.C ../common/parseCommand.h ../common/getCPU.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:

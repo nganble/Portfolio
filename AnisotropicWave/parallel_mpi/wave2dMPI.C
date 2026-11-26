@@ -16,7 +16,8 @@
 #include <mpi.h>
 #include <limits.h>
 #include "getLocalIndexBounds.h"
-#include "parseCommand.h"
+// [old] #include "parseCommand.h"
+#include "../common/parseCommand.h"
 #define REAL_EPSILON DBL_EPSILON
 #define REAL_MIN DBL_MIN
 
@@ -33,16 +34,8 @@ using std::string;
 using std::max;
 using std::min;
 
-#include <ctime>
-// Function return the current wall-clock time in seconds
-inline double getCPU()
-{
-	#ifdef USE_PPP
-		return MPI_Wtime(); // use MPI timer
-	#else
-		return ( 1.0*std::clock() )/CLOCKS_PER_SEC ;
-	#endif
-}
+// getCPU(): moved to common/getCPU.h (MPI_Wtime; the old version used clock() unless -DUSE_PPP)
+#include "../common/getCPU.h"
 
 
 // function to write an array to a matlab reabable file:
@@ -311,6 +304,9 @@ int main(int argc, char *argv[])
 	const int nd2_l  = nd2b_l - nd2a_l+1;
 // [old] 	const int nd_l   = nd1 * nd2_l; // total number of local grid points
 	const int nd_l   = ld * nd2_l; // number of stored values of a local array
+	// Interior rows owned by this rank (the global boundary rows are set by the boundary conditions)
+	const int n2a_int = max(n2a_l, n2a + 1);
+	const int n2b_int = min(n2b_l, n2b - 1);
 
 	/*
 	int *boundaryCondition_p = new int[2 * numberOfDimensions];
@@ -482,9 +478,11 @@ int main(int argc, char *argv[])
 	}
 	// Approximation for U1
 	// Use Taytor expansion and the PDE for interior points
-	for (i2 = n2a_l; i2 <= n2b_l; i2++)
+	// [old] for (i2 = n2a_l; i2 <= n2b_l; i2++)
+	for (i2 = n2a_int; i2 <= n2b_int; i2++)
 	{
-		for (i1 = n1a; i1 <= n1b; i1++)
+		// [old] for (i1 = n1a; i1 <= n1b; i1++)
+		for (i1 = n1a + 1; i1 <= n1b - 1; i1++)
 		{
 			uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) *
 			    ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * up(i1 + 1, i2) -
@@ -617,9 +615,11 @@ int main(int argc, char *argv[])
 		const int next = (n + 2) % 3;     // next time level
 
 		// Update the interior points
-		for(i2 = n2a_l; i2 <= n2b_l; i2++)
+		// [old] for(i2 = n2a_l; i2 <= n2b_l; i2++)
+		for(i2 = n2a_int; i2 <= n2b_int; i2++)
 		{
-			for(i1 = n1a; i1 <= n1b; i1++)
+			// [old] for(i1 = n1a; i1 <= n1b; i1++)
+			for(i1 = n1a + 1; i1 <= n1b - 1; i1++)
 			{
 				un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2))*
 					((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -

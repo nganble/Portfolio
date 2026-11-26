@@ -12,7 +12,8 @@
 #include <math.h>
 #include <float.h>
 #include <assert.h>
-#include "parseCommand.h"
+// [old] #include "parseCommand.h"
+#include "../common/parseCommand.h"
 
 // Define a new type "Real" which is equivalent to a "double"
 typedef double Real;
@@ -22,12 +23,8 @@ using std::string;
 using std::max;
 using std::min;
 
-#include <ctime>
-// Function return the current wall-clock time in seconds
-inline double getCPU()
-{
-	return( 1.0*std::clock() )/CLOCKS_PER_SEC;
-}
+// getCPU(): moved to common/getCPU.h (now wall-clock time, as in the parallel codes)
+#include "../common/getCPU.h"
 
 
 // function to write an array to a matlab reabable file:

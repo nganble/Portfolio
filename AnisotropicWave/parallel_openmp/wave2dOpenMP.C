@@ -22,10 +22,12 @@
 #define REAL_MIN DBL_MIN
 
 // include commands tp parse command line arguments
-#include "parseCommand.h"
+// [old] #include "parseCommand.h"
+#include "../common/parseCommand.h"
 
 // getCPU() : Return the current wall-clock time in seconds
-#include "getCPU.h"
+// [old] #include "getCPU.h"
+#include "../common/getCPU.h"
 
 // Define a new type "Real" which is equivalent to a "double"
 typedef double Real;

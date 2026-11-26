@@ -11,7 +11,7 @@ all: wave2dSerial
 wave2dSerial: wave2dSerial.o
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-wave2dSerial.o: wave2dSerial.C parseCommand.h
+wave2dSerial.o: wave2dSerial.C ../common/parseCommand.h ../common/getCPU.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 
