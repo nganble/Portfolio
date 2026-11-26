@@ -106,14 +106,6 @@ and we write $f_{ij}^n=f(x_i,y_j,t^n)$, $\rho_{ij}=\rho(x_i,y_j)$. The second-or
 L_h W_{ij} ={}& D_{+x}\left[M^{11}_{i-1/2,j}D_{-x}W_{ij}\right]+D_{+y}\left[M^{22}_{i,j-1/2}D_{-y}W_{ij}\right] \notag\\
 & + D_{0x}\left[M^{12}_{ij}D_{0y}W_{ij}\right]+D_{0y}\left[M^{21}_{ij}D_{0x}W_{ij}\right]. \label{eq:2DAnisotropicLh}
 \end{align}
-\textcolor{red}{\textbf{Note (current C++ code, wrong):} the OpenMP and MPI codes (fixed in the serial code) average the off-diagonal coefficients to the half grid points but keep the differences at $i\pm1$ and $j\pm1$,
-\begin{align*}
-& \dfrac{1}{2\Delta x}\left[M^{12}_{i+1/2,j}D_{0y}W_{i+1,j} - M^{12}_{i-1/2,j}D_{0y}W_{i-1,j}\right] \\
-& + \dfrac{1}{2\Delta y}\left[M^{21}_{i,j+1/2}D_{0x}W_{i,j+1} - M^{21}_{i,j-1/2}D_{0x}W_{i,j-1}\right], \\
-& M^{12}_{i\pm1/2,j} = \dfrac{m_{12}(x_{i\pm1},y_j)+m_{12}(x_i,y_j)}{2}, \quad M^{21}_{i,j\pm1/2} = \dfrac{m_{21}(x_i,y_{j\pm1})+m_{21}(x_i,y_j)}{2}.
-\end{align*}
-This is inconsistent when $m_{12}$ depends on $x$ (or $m_{21}$ on $y$): for $m_{12}=x$ and $D_{0y}W=1$ it gives $(M^{12}_{i+1/2,j}-M^{12}_{i-1/2,j})/(2\Delta x)=1/2$ instead of $\partial_x m_{12}=1$. To be replaced by the pointwise form in~\eqref{eq:2DAnisotropicLh}.}
-
 The explicit scheme for~\eqref{eq:2DAnisotropicWaveEquation} is given by
 \begin{subequations}
 \label{eq:explicitScheme}
@@ -172,7 +164,7 @@ The exact solutions are
 \begin{itemize}
 \item \textcolor{blue}{poly} (manufactured solution, $f=\rho w_{tt}-\nabla\cdot(\bm{m}\cdot\nabla w)$):
 $w=(b_0+b_1x+b_2x^2)(c_0+c_1y+c_2y^2)(a_0+a_1t+a_2t^2)$, with $(a_0,a_1,a_2)=(0.5,0.7,0.9)$, $(b_0,b_1,b_2)=(0.5,0.8,0.6)$, $(c_0,c_1,c_2)=(0.3,0.25,0.2)$.
-\item \textcolor{blue}{trig}: $w=3\cos(s)$,
+\item \textcolor{blue}{trig}: $w=3\cos(s)$,OpenMP with 1 thread runs at about half serial speed.
 \quad \textcolor{blue}{pulse}: $w=4e^{-3s^2}$,
 \quad \textcolor{blue}{trigPulse}: $w=2e^{-2.5s^2}\cos(2s)$,
 \end{itemize}
@@ -250,60 +242,83 @@ Case & Coefficients & Solution & $\max|\mbox{maxErr}_{\text{C++}}-\mbox{maxErr}_
 \end{tabular}
 \end{center}
 \end{table}
-\subsection { Parallel version}
-\textcolor{red}{Results from the old code (before the fixes); to be updated.}\\
-Here we are testing for polynomial manufactured solution with constant coefficients using 4 threads/processes. We observe that the errors are the same as those in the serial code.\\
-	$\bullet$ OpenMP code
-%			\begin{table}[H]\footnotesize 
-%					\begin{center}
-%						\begin{tabular}{|c|c|c|c|c|} \hline 
-%						%	\multicolumn{4}{|c|}{heat1d CUDA version}    \\  \hline
-%							$\mbox{nx}$   & $\mbox{tFinal}$        & $\mbox{Nt}$   & $\mbox{maxNorm}$  & $\mbox{maxRelErr}$	\\  \hline 
-%							$ 20 $     & $\mbox{0.5}$          & $ 21 $       & $1.53e+00$   & $3.62e-16$   \\ 
-%							$ 40 $     & $\mbox{0.5}$          & $ 41 $       & $1.53e+00$   & $5.80e-16$  \\ 
-%							$ 80 $    & $\mbox{0.5}$          & $ 81 $       & $1.53e+00$   &  $8.70e-16$  \\ 
-%							$ 160 $   & $\mbox{0.5}$         & $ 161 $       & $1.53e+00$   &   $1.59e-15$  \\ 
-%							\hline
-%						\end{tabular}
-%						\caption{
-%							Results for polynomial manufactured solution with 1 thread
-%						}
-%						\label{tab:openMPwave2d}
-%					\end{center}
-%				\end{table}
+\subsection{Parallel versions}
+The OpenMP code (1, 2, 4 and 8 threads) and the MPI code ($\mbox{np}=1,2,4,8$) are run on the same five test cases and grids as the serial code, with \texttt{parallel\_openmp/runBaselineOpenMP.sh} and \texttt{parallel\_mpi/runBaselineMPI.sh}. All runs pass; the table gives the largest difference in maxErr over the four grids.
+\begin{table}[H]\footnotesize
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|c|c|} \hline
+ & & & \multicolumn{2}{c|}{OpenMP} & \multicolumn{2}{c|}{MPI} \\ \cline{4-7}
+Case & Coefficients & Solution & vs serial & vs MATLAB & vs serial & vs MATLAB \\ \hline
+1 & constant & poly & $9.55\cdot 10^{-17}$ & $4.33\cdot 10^{-16}$ & $0$ & $4.28\cdot 10^{-16}$ \\
+2 & constant & trig & $0$ & $2.44\cdot 10^{-15}$ & $0$ & $2.44\cdot 10^{-15}$ \\
+3 & constant & pulse & $0$ & $2.22\cdot 10^{-15}$ & $0$ & $2.22\cdot 10^{-15}$ \\
+4 & constant & trigPulse & $0$ & $1.53\cdot 10^{-15}$ & $0$ & $1.53\cdot 10^{-15}$ \\
+5 & variable & poly & $0$ & $2.10\cdot 10^{-15}$ & $0$ & $2.10\cdot 10^{-15}$ \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+The results are identical (bit for bit) for every number of threads and processes. The small differences of the OpenMP code from the serial code in case 1 come from round-off with a different compiler (g++-16 for OpenMP, Apple clang for the serial reference).
+
+$\bullet$ OpenMP code, case 5 (variable coefficients, poly), 1 thread
 \begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
-./wave2dOpenMP -nx=20 -tFinal=0.5 -numThreads=4 -debug=0
-nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
-CPU: numSteps=21 nx=20 maxNorm=1.53e+00 maxRelErr=3.62e-16 cpuTime= 7.62e-04(s)
-	
-./wave2dOpenMP -nx=40 -tFinal=0.5 -numThreads=4 -debug=0
-nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
-CPU: numSteps=41 nx=40 maxNorm=1.53e+00 maxRelErr=5.80e-16 cpuTime= 5.03e-03(s)
-	
-./wave2dOpenMP -nx=80 -tFinal=0.5 -numThreads=4 -debug=0
-nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
-CPU: numSteps=81 nx=80 maxNorm=1.53e+00 maxRelErr=8.70e-16 cpuTime= 3.90e-02(s)
+poly: Nt=102 dt=4.90e-03 maxNorm=1.53e+00 maxRelErr=4.18e-05 cpuTime= 1.21e-03(s)
+poly: Nt=204 dt=2.45e-03 maxNorm=1.53e+00 maxRelErr=1.04e-05 cpuTime= 4.67e-03(s) ratio=4.00
+poly: Nt=409 dt=1.22e-03 maxNorm=1.53e+00 maxRelErr=2.61e-06 cpuTime= 2.63e-02(s) ratio=4.00
+poly: Nt=817 dt=6.12e-04 maxNorm=1.53e+00 maxRelErr=6.53e-07 cpuTime= 2.06e-01(s) ratio=4.00
 \end{Verbatim}
-\newpage
-	$\bullet$ MPI code
+$\bullet$ MPI code, case 5 (variable coefficients, poly), $\mbox{np}=1$
 \begin{Verbatim}[fontsize=\footnotesize,formatcom=\color{blue},frame=single,framerule=1pt,numbers=left]
-mpirun -np=4 ./wave2dMPI -tFinal=.5 -nx=20 -debug=0
-nx=20 ny=20 dt=2.38e-02 numSteps=21 tFinal=  0.50
-np=4 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=3.62e-16 cpuTimeStepG= 2.26e-04(s)
-
-mpirun -np=4 ./wave2dMPI -tFinal=.5 -nx=40 -debug=0
-nx=40 ny=40 dt=1.22e-02 numSteps=41 tFinal=  0.50
-np=4 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=5.80e-16 cpuTimeStepG= 6.04e-04(s)
-
-mpirun -np=4 ./wave2dMPI -tFinal=.5 -nx=80 -debug=0
-nx=80 ny=80 dt=6.17e-03 numSteps=81 tFinal=  0.50
-np=4 myRank=0 Gathered solution: maxNormG=1.53e+00 maxRelErrG=8.70e-16 cpuTimeStepG= 7.57e-03(s)
+poly: Nt=102 dt=4.90e-03 maxNorm=1.53e+00 maxRelErr=4.18e-05 cpuTime= 9.22e-04(s)
+poly: Nt=204 dt=2.45e-03 maxNorm=1.53e+00 maxRelErr=1.04e-05 cpuTime= 5.71e-03(s) ratio=4.00
+poly: Nt=409 dt=1.22e-03 maxNorm=1.53e+00 maxRelErr=2.61e-06 cpuTime= 4.65e-02(s) ratio=4.00
+poly: Nt=817 dt=6.12e-04 maxNorm=1.53e+00 maxRelErr=6.53e-07 cpuTime= 3.61e-01(s) ratio=4.00
 \end{Verbatim}
 
+\section{Parallel speedup}
+\subsection{Results on a laptop (Apple M3 Pro)}
+The timings use constant coefficients with the poly solution, $N_x=N_y=2048$ and $t_{\text{final}}=0.1$ (161 time steps), on an Apple M3 Pro with 5 performance and 6 efficiency cores. All codes are compiled with \texttt{g++-16 -O3} (the MPI code through \texttt{mpicxx}, Open MPI 5.0.11), and the time of the time-stepping loop is the fastest of three runs (scripts \texttt{parallel\_openmp/runTimingOpenMP.sh} and \texttt{parallel\_mpi/runTimingMPI.sh}, results in \texttt{reference/timing\_*\_mac.txt}). The speedup and efficiency are given relative to the serial code ($S_{\text{ser}}=T_{\text{serial}}/T_p$, $E_{\text{ser}}=S_{\text{ser}}/p$) and relative to the same code on one thread or process ($S_1=T_1/T_p$, $E_1=S_1/p$).
+\begin{table}[H]\footnotesize
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|c|c|} \hline
+\multicolumn{7}{|c|}{OpenMP version} \\ \hline
+Code & threads & time (s) & $S_{\text{ser}}$ & $E_{\text{ser}}$ & $S_1$ & $E_1$ \\ \hline
+serial & 1 & 10.70 & 1.00 & 1.00 & - & - \\
+openmp & 1 & 19.90 & 0.54 & 0.54 & 1.00 & 1.00 \\
+openmp & 2 & 10.30 & 1.04 & 0.52 & 1.93 & 0.97 \\
+openmp & 4 & 5.65 & 1.89 & 0.47 & 3.52 & 0.88 \\
+openmp & 5 & 4.65 & 2.30 & 0.46 & 4.28 & 0.86 \\
+openmp & 8 & 2.86 & 3.74 & 0.47 & 6.96 & 0.87 \\
+openmp & 10 & 2.32 & 4.61 & 0.46 & 8.58 & 0.86 \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+\begin{table}[H]\footnotesize
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|c|c|} \hline
+\multicolumn{7}{|c|}{MPI version} \\ \hline
+Code & np & time (s) & $S_{\text{ser}}$ & $E_{\text{ser}}$ & $S_1$ & $E_1$ \\ \hline
+serial & 1 & 9.68 & 1.00 & 1.00 & - & - \\
+mpi & 1 & 8.23 & 1.18 & 1.18 & 1.00 & 1.00 \\
+mpi & 2 & 4.46 & 2.17 & 1.09 & 1.85 & 0.92 \\
+mpi & 4 & 2.46 & 3.93 & 0.98 & 3.35 & 0.84 \\
+mpi & 5 & 1.96 & 4.94 & 0.99 & 4.20 & 0.84 \\
+mpi & 8 & 1.31 & 7.39 & 0.92 & 6.28 & 0.79 \\
+mpi & 10 & 1.17 & 8.27 & 0.83 & 7.03 & 0.70 \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+Remarks:
+\begin{itemize}
+\item Relative to one thread or process, both codes scale in the same way: $E_1\approx 0.85$ up to 5 threads or processes (the performance cores). Beyond 5, the slower efficiency cores are also used.
+\item The OpenMP code on one thread is about two times slower than the serial code. The same source compiled without \texttt{-fopenmp} runs at the speed of the serial code, so the overhead comes from the OpenMP parallel loops (to be fixed in the refactor).
+\item The MPI code on one process is about 1.2 times faster than the serial code, so $E_{\text{ser}}>1$ for $\mbox{np}=1,2$. The MPI arrays have one ghost line (rows of 2051 values) and the serial arrays have none (rows of 2049 values); with one ghost line the serial code takes 8.9\,s instead of 10.3\,s. This is likely a cache effect of the row length close to a power of two (to be fixed in the refactor with one array layout for all codes).
+\end{itemize}
 
-\section{Parallel speedup.}
-\textcolor{red}{Results from the old code (before the fixes); to be updated.}\\
-For testing speedup, we run the code on cg66 using $nx = ny = 2048$, $\mbox{tFinal=0.1}$. The serial code took 32.9 seconds to run. Here are the results for openMP and MPI versions.
+\subsection{Earlier results on cg66 (old code)}
+These results are from the original code (2023, before the fixes above), run on cg66 with $N_x=N_y=2048$ and $t_{\text{final}}=0.1$. The serial code took 32.9 seconds.
 \begin{table}[H]\footnotesize 
 \begin{center}
 \begin{tabular}{|c|c|c|c|} \hline 
@@ -318,7 +333,7 @@ $ 32 $   & $\mbox{1.27}$         & $ 26.92 $       & $0.84$   \\
 \hline
 \end{tabular}
 \caption{
-Speedup for openMP code.
+Speedup for the openMP code on cg66 (old code).
 }
 \label{tab:openMP code}
 \end{center}
@@ -338,7 +353,7 @@ $ 32 $   & $\mbox{2.17}$         & $ 14.97 $       & $0.46$   \\
 \hline
 \end{tabular}
 \caption{
-Speedup for MPI code.
+Speedup for the MPI code on cg66 (old code).
 }
 \label{tab:MPI code}
 \end{center}
