@@ -1,36 +1,18 @@
-#
-# THIS MAKE FILE USES THE FOLLOWING ENVIROMENTAL VARIABLE:
-#
+# Makefile for the MPI anisotropic wave solver
+# Usage: make | make clean | make CXX=<compiler>   (override the MPI compiler wrapper)
 
-# First target is made by default when using "make", traditionally named "all"
-# all = heat2d
-all = wave2dMPI
+CXX      = mpicxx
+CXXFLAGS = -O3 -Wall
 
-# Set names of compilers once in case we need to change them
-CC = gcc
-CXX = mpic++
+all: wave2dMPI
 
-opt = -O3
+wave2dMPI: wave2dMPI.o
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
+wave2dMPI.o: wave2dMPI.C parseCommand.h getLocalIndexBounds.h writeMatlabArray.h
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-# include -DUSE_PPP with compile flags:
-CCFLAGS= -DUSE_PPP -fPIC $(opt)
+clean:
+	rm -f *.o wave2dMPI
 
-# link to libPpp instead of libApp
-#AppLibraries = -Wl,-rpath,$(APlusPlus)/lib -L$(APlusPlus)/lib -lPpp -lPpp_static
-
-# List of all libraries
-LIBS = $(AppLibraries)
-
-# implicit (generic) rule to compile .C files
-# $@ = file name of the target
-# $< = name of the first prerequisite
-%.o : %.C
-	$(CXX) $(CCFLAGS) -o $@ -c $<
-
-# 2D heat equation, explicit time-stepping, A++ arrays
-wave2dMPIFiles = wave2dMPI.o
-wave2dMPI: $(wave2dMPIFiles)
-	$(CXX) $(CCFLAGS) -o $@ $(wave2dMPIFiles) $(LIBS)
-	
-clean:; rm *.o
+.PHONY: all clean

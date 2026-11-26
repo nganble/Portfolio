@@ -1,9 +1,7 @@
-// mpic++ -O3 -o wave2dMPI wave2dMPI.C
-// Note: need to create a directory named debug first
-// mpirun -np=2 ./wave2dMPI -tFinal=.1 -nx=10 -debug=0 (for cg66 and DRP cluster)
-// mpirun -np=1 ./wave2dMPI -tFinal=.5 -nx=80 -debug=0
-// mpirun -np=20 ./wave2dMPI -tFinal=.1 -nx=2048 -debug=0 (test for speedup)
-// Remember to creat a debug folder before excuting the program
+// make            (or: mpicxx -O3 -o wave2dMPI wave2dMPI.C)
+// mpirun -np 4 ./wave2dMPI -tFinal=0.5 -nx=80 -debug=0
+// mpirun -np 4 ./wave2dMPI -tFinal=0.1 -nx=2048 -debug=0   (test for speedup)
+// -debug>0 writes debug/debugFileNp<np>Proc<rank>.debug (the folder debug/ must exist)
 // =====================================================================
 //
 // ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS
@@ -104,14 +102,14 @@ int main(int argc, char *argv[])
 	// debug = 2: check first error after each time-step
 	// debug = 1: write to debug files
 	int debug = 0;
-	Real xa = 0.0, xb = 1.0; // domain is [xa,xb] X [ya,yb]
-	Real ya = 0.0, yb = 1.0;
+	Real xa = -1.0, xb = 1.0; // domain is [xa,xb] X [ya,yb]
+	Real ya = -1.0, yb = 1.0;
 
 	Real tFinal = 0.5;
 	Real cfl = 0.9;
 	int nx = 100, ny = nx;
 	int saveMatlab = 0; // 1 = save a matlab file, 2 = save solution too
-	string matlabFileName = "wave2dMPI.m";
+	string matlabFileName = "anisotropicWave2DMPI.m";
 
 	bool echo;
 	if (myRank==0)
@@ -172,29 +170,31 @@ int main(int argc, char *argv[])
 	#endif
 	
 	#if COEFF == CONS
+		const char *coeffName = "const";
 		#define RHO(x, y)   (1.0)
 		#define M11(x, y)   (1.0)
 		#define M11x(x, y)  (0.0)
-		#define M12(x, y)   (1.0)
+		#define M12(x, y)   (0.0)
 		#define M12x(x, y)  (0.0)
 		#define M21(x, y)   (0.0)
 		#define M21y(x, y)  (0.0)
-		#define M22(x, y)   (2.0)
+		#define M22(x, y)   (1.0)
 		#define M22y(x, y)  (0.0)
 
 	#elif COEFF == VAR
+		const char *coeffName = "var";
+		// symmetric (m12 = m21) and positive definite on (-1,1)^2
 		const Real a11 = 0.3;
 		const Real a12 = 0.2;
-		const Real a21 = 0.0;
 		const Real a22 = 0.6;
-		#define RHO(x, y)  (1.0 * sin((x) + (y)) + 1.1)
-		#define M11(x, y)  (a11 * ((x) + (y)) + 1.0)
+		#define RHO(x, y)  (0.1 * (sin((x) + (y)) + 1.1))
+		#define M11(x, y)  (a11 * ((x) + (y)) + 2.0)
 		#define M11x(x, y) (a11)
-		#define M12(x, y)  (0.0)
-		#define M12x(x, y) (0.0)
-		#define M21(x, y)  (2.0)
-		#define M21y(x, y) (0.0)
-		#define M22(x, y)  (a22 * (2.0 * (x) + (y)) + 2.0)
+		#define M12(x, y)  (0.5 + a12 * ((x) + (y)))
+		#define M12x(x, y) (a12)
+		#define M21(x, y)  (M12(x, y))
+		#define M21y(x, y) (a12)
+		#define M22(x, y)  (a22 * (2.0 * (x) + (y)) + 3.0)
 		#define M22y(x, y) (a22)
 
 	#endif
@@ -205,19 +205,23 @@ int main(int argc, char *argv[])
 	#define PULSE 3
 	#define PULSETRIG 4
 	#ifndef SOLUTION
-		// #define SOLUTION TRIG
 		#define SOLUTION POLY
+		// #define SOLUTION TRIG
+		// #define SOLUTION PULSE
+		// #define SOLUTION PULSETRIG
 	#endif
 
 	#if SOLUTION == TRIG
+		const char *msName = "trig";
 		const Real kx = 1;
-		const Real ky = 0;
+		const Real ky = 1;
 		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
 														M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
 		#define UTRUE(x, y, t)   (3.0 * cos(kx * (x) + ky * (y) - omega * (t)))
 		#define UTRUET(x, y, t)  (3.0 * omega * sin(kx * (x) + ky * (y) - omega * (t)))
 		#define FORCE(x, y, t)   (0.0)
 	#elif SOLUTION == POLY
+		const char *msName = "poly";
 		// Coefficients for manufactured solution
 		static const Real a0 = .5, a1 = .7, a2 = .9;  // Time coefficients
 		static const Real b0 = .5, b1 = .8, b2 = .6;  // Space coefficients in x
@@ -235,6 +239,32 @@ int main(int argc, char *argv[])
 												 	 (M12(x, y) + M21(x, y)) * UTRUEXY(x, y, t) - \
 												 	 (M11x(x, y) + M21y(x, y)) * UTRUEX(x, y, t) - \
 												 	 (M12x(x, y) + M22y(x, y)) * UTRUEY(x, y, t))
+	#elif SOLUTION == PULSE
+		const char *msName = "pulse";
+		// Gaussian pulse: u = 4 exp(-beta s^2), s = kx x + ky y - omega t
+		const Real kx = 1;
+		const Real ky = 1;
+		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
+								M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
+		#define PHASE(x, y, t)  (kx * (x) + ky * (y) - omega * (t))
+		const Real beta = 3.0;
+		#define UTRUE(x, y, t)   (4.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)))
+		#define UTRUET(x, y, t)  (2.0 * beta * omega * PHASE(x, y, t) * UTRUE(x, y, t))
+		#define FORCE(x, y, t)   (0.0)
+	#elif SOLUTION == PULSETRIG
+		const char *msName = "trigPulse";
+		// Modulated pulse: u = 2 exp(-beta s^2) cos(kn s), s = kx x + ky y - omega t
+		const Real kx = 1;
+		const Real ky = 1;
+		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
+								M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
+		#define PHASE(x, y, t)  (kx * (x) + ky * (y) - omega * (t))
+		const Real beta = 2.5;
+		const Real kn = 2.0;
+		#define UTRUE(x, y, t)   (2.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)) * cos(kn * PHASE(x, y, t)))
+		#define UTRUET(x, y, t)  (2.0 * beta * omega * PHASE(x, y, t) * UTRUE(x, y, t) + \
+								 kn * omega * 2.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)) * sin(kn * PHASE(x, y, t)))
+		#define FORCE(x, y, t)   (0.0)
 	#endif
 
 	const int numGhost = 1;  // use Dirichlet bc's
@@ -405,7 +435,7 @@ int main(int argc, char *argv[])
 		for (i1 = n1a; i1 <= n1b; i1++)   // Don't need to compute at ghost points
 		{
 			Real ind = sqrt(rho(i1, i2)) / sqrt(m11(i1,i2) / (dx[0] * dx[0])
-									+ (m12(i1, i2) + m21(i1,i2))/(4 * dx[0] * dx[1])
+									+ fabs(m12(i1, i2) + m21(i1,i2))/(4 * dx[0] * dx[1])
 									+ m22(i1, i2) / (dx[1] * dx[1]));
 			// printf("min[%d,%d]=%4.5f\n", i1, i2,ind);
 			dt_l = min(dt_l, ind);
@@ -441,10 +471,10 @@ int main(int argc, char *argv[])
 			    ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * up(i1 + 1, i2) -
 					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * up(i1, i2) +
 					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * up(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (0.5 * (m12(i1 + 1, i2) + m12(i1, i2)) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
-					  0.5 * (m12(i1 - 1, i2) + m12(i1, i2)) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m21(i1, i2 + 1) + m21(i1, i2)) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
-					  0.5 * (m21(i1, i2 - 1) + m21(i1, i2)) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m12(i1 + 1, i2) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
+					  m12(i1 - 1, i2) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m21(i1, i2 + 1) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
+					  m21(i1, i2 - 1) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
 			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * up(i1, i2 + 1) -
 					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * up(i1, i2) +
 					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * up(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
@@ -466,33 +496,23 @@ int main(int argc, char *argv[])
 	}
 	else  // we have more than one processor
 	{
-		if (myRank != 0)
-		{
-			if (myRank == np-1) // Apply Dirichlet bc's for the highest rank
-				for (i1 = nd1a; i1 <= nd1b; i1++)
-					uc(i1, n2b_l) = UTRUE(x(i1, n2b_l), y(i1, n2b_l), dt); // Top
-
-			// Send parallel ghost to rank-1
-			MPI_Send(&uc(n1a, n2a_l), nx + 1, MPI_DOUBLE, myRank - 1, 1, MPI_COMM_WORLD);
-			//printf("Sent from rank %d to rank %d complete\n", myRank, myRank-1);
-			// Receive parallel ghost from rank-1
-			MPI_Recv(&uc(n1a, nd2a_l), nx + 1, MPI_DOUBLE, myRank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			//printf("Rank %d recieved data from rank %d complete\n", myRank, myRank + 1);
-			
-		}
-		if (myRank != np-1)
-		{
-			if (myRank == 0) // Apply Dirichlet bc's for the lowest rank
-				for (i1 = nd1a; i1 <= nd1b; i1++)
-					uc(i1, n2a_l) = UTRUE(x(i1, n2a_l), y(i1, n2a_l), dt); // Bottom
-
-			// Send parallel ghost to rank+1
-			MPI_Send(&uc(n1a, n2b_l), nx + 1, MPI_DOUBLE, myRank + 1, 1, MPI_COMM_WORLD);
-			//printf("Sent from rank %d to rank %d complete\n", myRank, myRank+1);
-			// Receive parallel ghost from rank+1
-			MPI_Recv(&uc(n1a, nd2b_l), nx + 1, MPI_DOUBLE, myRank + 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			//printf("Rank %d recieved data from rank %d complete\n", myRank, myRank + 1);
-		}
+		// Dirichlet bc's at the bottom (rank 0) and top (rank np-1) boundaries
+		if (myRank == 0)
+			for (i1 = nd1a; i1 <= nd1b; i1++)
+				uc(i1, n2a_l) = UTRUE(x(i1, n2a_l), y(i1, n2a_l), dt); // Bottom
+		if (myRank == np-1)
+			for (i1 = nd1a; i1 <= nd1b; i1++)
+				uc(i1, n2b_l) = UTRUE(x(i1, n2b_l), y(i1, n2b_l), dt); // Top
+		// Exchange parallel ghost lines with the neighbours (MPI_PROC_NULL at the ends).
+		// MPI_Sendrecv does not rely on MPI buffering, so it cannot deadlock.
+		const int below = (myRank > 0)      ? myRank - 1 : MPI_PROC_NULL;
+		const int above = (myRank < np - 1) ? myRank + 1 : MPI_PROC_NULL;
+		// send the first line to rank-1, receive the top ghost line from rank+1
+		MPI_Sendrecv(&uc(n1a, n2a_l), nx + 1, MPI_DOUBLE, below, 1,
+		             &uc(n1a, nd2b_l), nx + 1, MPI_DOUBLE, above, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		// send the last line to rank+1, receive the bottom ghost line from rank-1
+		MPI_Sendrecv(&uc(n1a, n2b_l), nx + 1, MPI_DOUBLE, above, 1,
+		             &uc(n1a, nd2a_l), nx + 1, MPI_DOUBLE, below, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	}
 	
 	// Check error for approximation of U1
@@ -563,6 +583,8 @@ int main(int argc, char *argv[])
 			fprintf(file, "----- Solving Anisotropic Wave Equation in two dimensions ------\n");
 			fprintf(file, " saveMatlab=%d, matlabFileName=%s \n",saveMatlab,matlabFileName.c_str());
 			fprintf(file, " nx=%d ny=%d dt=%6.2e numSteps=%d tFinal=%6.2f\n", nx, ny,dt, numSteps, tFinal);
+			fprintf(file, " coeffs=%s, ms=%s, domain=[%g,%g]x[%g,%g], cfl=%4.2f, tFinal=%4.2f, np=%d\n",
+					coeffName, msName, xa, xb, ya, yb, cfl, tFinal, np);
 		}
 	}
 	
@@ -584,10 +606,10 @@ int main(int argc, char *argv[])
 					((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -
 					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * uc(i1, i2) +
 					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * uc(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (0.5 * (m12(i1 + 1, i2) + m12(i1, i2)) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
-					  0.5 * (m12(i1 - 1, i2) + m12(i1, i2)) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m21(i1, i2 + 1) + m21(i1, i2)) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
-					  0.5 * (m21(i1, i2 - 1) + m21(i1, i2)) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m12(i1 + 1, i2) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
+					  m12(i1 - 1, i2) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			+    (m21(i1, i2 + 1) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
+					  m21(i1, i2 - 1) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
 			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * uc(i1, i2 + 1) -
 					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * uc(i1, i2) +
 					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * uc(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
@@ -610,30 +632,23 @@ int main(int argc, char *argv[])
 		}
 		else				 // more than one processor
 		{
-			if (myRank != 0)
-			{
-				if (myRank == np-1) // Apply Dirichlet bc's for the highest rank
-					for (i1 = nd1a; i1 <= nd1b; i1++)
-						un(i1, n2b_l) = UTRUE(x(i1, n2b_l), y(i1, n2b_l), t + dt); // Top
-				// Send parallel ghost to rank-1
-				MPI_Send(&un(n1a, n2a_l), nx + 1, MPI_DOUBLE, myRank - 1, n, MPI_COMM_WORLD);
-				//printf("Sent from rank %d to rank %d complete\n", myRank, myRank-1);
-				// Receive parallel ghost from rank-1
-				MPI_Recv(&un(n1a, nd2a_l), nx + 1, MPI_DOUBLE, myRank - 1, n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				//printf("Rank %d recieved data from rank %d complete\n", myRank, myRank + 1);
-			}
-			if (myRank != np-1)
-			{
-				if (myRank == 0) // Apply Dirichlet bc's for the lowest rank
-					for (i1 = nd1a; i1 <= nd1b; i1++)
-						un(i1, n2a_l) = UTRUE(x(i1, n2a_l), y(i1, n2a_l), t + dt); // Bottom
-				// Send parallel ghost to rank+1
-				MPI_Send(&un(n1a, n2b_l), nx + 1, MPI_DOUBLE, myRank + 1, n, MPI_COMM_WORLD);
-				//printf("Sent from rank %d to rank %d complete\n", myRank, myRank+1);
-				// Receive parallel ghost from rank+1
-				MPI_Recv(&un(n1a, nd2b_l), nx + 1, MPI_DOUBLE, myRank + 1, n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				//printf("Rank %d recieved data from rank %d complete\n", myRank, myRank + 1);
-			}
+			// Dirichlet bc's at the bottom (rank 0) and top (rank np-1) boundaries
+			if (myRank == 0)
+				for (i1 = nd1a; i1 <= nd1b; i1++)
+					un(i1, n2a_l) = UTRUE(x(i1, n2a_l), y(i1, n2a_l), t + dt); // Bottom
+			if (myRank == np-1)
+				for (i1 = nd1a; i1 <= nd1b; i1++)
+					un(i1, n2b_l) = UTRUE(x(i1, n2b_l), y(i1, n2b_l), t + dt); // Top
+			// Exchange parallel ghost lines with the neighbours (MPI_PROC_NULL at the ends).
+			// MPI_Sendrecv does not rely on MPI buffering, so it cannot deadlock.
+			const int below = (myRank > 0)      ? myRank - 1 : MPI_PROC_NULL;
+			const int above = (myRank < np - 1) ? myRank + 1 : MPI_PROC_NULL;
+			// send the first line to rank-1, receive the top ghost line from rank+1
+			MPI_Sendrecv(&un(n1a, n2a_l), nx + 1, MPI_DOUBLE, below, n,
+			             &un(n1a, nd2b_l), nx + 1, MPI_DOUBLE, above, n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			// send the last line to rank+1, receive the bottom ghost line from rank-1
+			MPI_Sendrecv(&un(n1a, n2b_l), nx + 1, MPI_DOUBLE, above, n,
+			             &un(n1a, nd2a_l), nx + 1, MPI_DOUBLE, below, n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		}
 
 		// Check error after first time step
@@ -724,6 +739,9 @@ int main(int argc, char *argv[])
 	// Gather maxNorm in all ranks
 	Real maxNorm_g = maxNorm;
 	MPI_Allreduce(&maxNorm, &maxNorm_g, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+	// Gather the absolute max error in all ranks (for the baseline)
+	Real maxErrAbs_g = maxErr;
+	MPI_Allreduce(&maxErr, &maxErrAbs_g, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 	maxErr /= max(maxNorm_g, REAL_MIN); // relative error
 	// Gather max error in all ranks
 	Real maxErr_g = maxErr;
@@ -747,6 +765,15 @@ int main(int argc, char *argv[])
 			fprintf(file, "np=%d myRank=%d Gathered solution: maxNormG=%8.2e maxRelErrG=%8.2e cpuTimeStepG=%9.2e(s)\n",
 					 		np, myRank, maxNorm_g, maxErr_g, cpuTimeStep_g);
 		}
+	}
+	if (myRank == 0)
+	{
+		// Same format as MATLAB (anisotropicWave_2D.m), plus the cpu time (max over ranks)
+		printf("%s: t=%4.2f Nx=%3d Ny=%3d Nt=%3d dt=%8.2e maxNorm=%8.2e maxRelErr=%8.2e cpuTime=%9.2e(s)\n",
+				msName, tFinal, nx, ny, numSteps, dt, maxNorm_g, maxErr_g, cpuTimeStep_g);
+		// Full precision for the baseline comparison with MATLAB (errMax, relErr)
+		printf("BASELINE: coeffs=%s ms=%s nx=%d numSteps=%d dt=%.16e maxErr=%.16e maxRelErr=%.16e\n",
+				coeffName, msName, nx, numSteps, dt, maxErrAbs_g, maxErr_g);
 	}
 	
 	// Gather all data from various processes to rank 0
