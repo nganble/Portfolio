@@ -54,14 +54,19 @@ timeRuns() {
     echo "# OpenMP timing: const poly, nx=$NX, tFinal=$TFINAL, numSteps=$numSteps, best of $REPEAT runs"
     echo "# machine=$MACHINE  cpu=$cpu"
     echo "# compiler=$compiler  flags=-O3  commit=$commit  date=$(date +%Y-%m-%d)"
-    printf "%-8s %-8s %-11s %-11s %-9s %-10s\n" code threads "min(s)" "median(s)" speedup efficiency
+    echo "# S_ser, E_ser: relative to the serial code;  S_1, E_1: relative to openmp with threads=1"
+    printf "%-8s %-8s %-11s %-11s %-7s %-7s %-7s %-7s\n" code threads "min(s)" "median(s)" S_ser E_ser S_1 E_1
 
     read Ts Tsmed < <(timeRuns "$BUILD/serial" -nx=$NX -tFinal=$TFINAL)
-    printf "%-8s %-8s %-11.3e %-11.3e %-9.2f %-10.2f\n" serial 1 "$Ts" "$Tsmed" 1 1
+    printf "%-8s %-8s %-11.3e %-11.3e %-7.2f %-7.2f %-7s %-7s\n" serial 1 "$Ts" "$Tsmed" 1 1 - -
+    T1=""
     for p in $THREADS; do
         read Tp Tpmed < <(timeRuns "$BUILD/openmp" -nx=$NX -tFinal=$TFINAL -numThreads=$p)
-        awk -v p="$p" -v ts="$Ts" -v tp="$Tp" -v tm="$Tpmed" 'BEGIN {
-            s = ts / tp; printf "%-8s %-8s %-11.3e %-11.3e %-9.2f %-10.2f\n", "openmp", p, tp, tm, s, s / p }'
+        [ "$p" = 1 ] && [ -z "$T1" ] && T1=$Tp     # time with 1 thread / process
+        awk -v p="$p" -v ts="$Ts" -v tp="$Tp" -v tm="$Tpmed" -v t1="$T1" 'BEGIN {
+            s = ts / tp
+            printf "%-8s %-8s %-11.3e %-11.3e %-7.2f %-7.2f ", "openmp", p, tp, tm, s, s / p
+            if (t1 == "") printf "%-7s %-7s\n", "-", "-"; else { s1 = t1 / tp; printf "%-7.2f %-7.2f\n", s1, s1 / p } }'
     done
 } | tee "$OUTFILE"
 
