@@ -48,6 +48,8 @@ using std::min;
 // Array macros x, y, up, uc, un, err, rho, m11, m12, m21, m22: moved to common/grid.h
 // allocateVectors, freeVectors and the row stride paddedStride: moved to common/grid.h
 #include "../common/grid.h"
+// L_h (the spatial operator) as the macro LH(u, i1, i2)
+#include "../common/stencil.h"
 
 int main(int argc, char *argv[])
 {
@@ -200,17 +202,18 @@ int main(int argc, char *argv[])
 	{
 		for (i1=n1a+1; i1<=n1b-1; i1++)
 		{
-			uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) *
-			    ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * up(i1 + 1, i2) -
-					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * up(i1, i2) +
-					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * up(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (m12(i1 + 1, i2) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
-					  m12(i1 - 1, i2) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (m21(i1, i2 + 1) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
-					  m21(i1, i2 - 1) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * up(i1, i2 + 1) -
-					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * up(i1, i2) +
-					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * up(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
+			// [old] uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) *
+			// [old] ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * up(i1 + 1, i2) -
+			// [old] 0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * up(i1, i2) +
+			// [old] 0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * up(i1 - 1, i2) ) / (dx[0] * dx[0])
+			// [old] +    (m12(i1 + 1, i2) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
+			// [old] m12(i1 - 1, i2) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			// [old] +    (m21(i1, i2 + 1) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
+			// [old] m21(i1, i2 - 1) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+			// [old] +    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * up(i1, i2 + 1) -
+			// [old] 0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * up(i1, i2) +
+			// [old] 0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * up(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
+			uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) * (LH(up, i1, i2) + FORCE(x(i1, i2), y(i1, i2), t) );
 		}
 	}
 	// End parallel
@@ -274,17 +277,18 @@ int main(int argc, char *argv[])
 		{
 			for(i1 = n1a+1; i1 <= n1b-1; i1++)
 			{
-				un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2))*
-					((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -
-					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * uc(i1, i2) +
-					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * uc(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (m12(i1 + 1, i2) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
-					  m12(i1 - 1, i2) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (m21(i1, i2 + 1) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
-					  m21(i1, i2 - 1) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * uc(i1, i2 + 1) -
-					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * uc(i1, i2) +
-					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * uc(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
+				// [old] un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2))*
+				// [old] ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -
+				// [old] 0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * uc(i1, i2) +
+				// [old] 0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * uc(i1 - 1, i2) ) / (dx[0] * dx[0])
+				// [old] +    (m12(i1 + 1, i2) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
+				// [old] m12(i1 - 1, i2) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+				// [old] +    (m21(i1, i2 + 1) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
+				// [old] m21(i1, i2 - 1) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
+				// [old] +    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * uc(i1, i2 + 1) -
+				// [old] 0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * uc(i1, i2) +
+				// [old] 0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * uc(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
+				un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2)) * (LH(uc, i1, i2) + FORCE(x(i1, i2), y(i1, i2), t) );
 			}
 		}
 		// End parallel
