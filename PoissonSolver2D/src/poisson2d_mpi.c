@@ -164,12 +164,14 @@ int main(int argc, char *argv[]){
 	// -------- Options to debug ----------
 	bool display_ginfo 		= false;
 	bool display_mesh 		= false;
+#if HAS_EXACT_SOLUTION
 	bool display_ini 		= false;
+	bool display_err 		= false;
+#endif
 	bool display_one_step_r	= false;
 	bool display_one_step_b = false;
 	bool display_comm 		= false;
 	bool display_res 		= false;
-	bool display_err 		= false;
 
 	if (debug == 1 && display_ginfo == true){
 		printf("Rank %d out of %d ranks: ny=%d, ny_l=%d, n2a_l=%d, n2b_l=%d, nd2a_l=%d, nd2b_l=%d, omega=%.2f\n",

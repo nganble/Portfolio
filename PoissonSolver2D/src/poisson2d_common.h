@@ -175,18 +175,6 @@ static inline HD int idx(int i1, int i2, const idx_t *f){
 		( exp(-lambda * lambda * (dxp * dxp + y * y)) 
 		- exp(-lambda * lambda * (dxm * dxm + y * y)) );
 	}
-	static inline real HD gxa(real y){
-		return 0.0;
-	}
-	static inline real HD gxb(real y){
-		return 0.0;
-	}
-	static inline real HD gya(real x){
-		return 0.0;
-	}
-	static inline real HD gyb(real x){
-		return 0.0;
-	}
 
 	#define HAS_EXACT_SOLUTION 0
 

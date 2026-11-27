@@ -66,9 +66,11 @@ int main(int argc, char *argv[]){
 	/* -------- Options to debug ------ */
 	int debug = 1;
 	bool display_mesh = false;
-	bool display_ini = false;
 	bool display_res = false;
+#if HAS_EXACT_SOLUTION
+	bool display_ini = false;
 	bool display_err = false;
+#endif
 
 
 	// Problem domains
@@ -255,9 +257,8 @@ int main(int argc, char *argv[]){
 	
 	printf("\n");
 
-	cleanup:
-		// Free all allocated vectors
-		free_vectors(x_p, y_p, u_p, r_p);
+	// Free all allocated vectors
+	free_vectors(x_p, y_p, u_p, r_p);
 
 } /* main */
 
