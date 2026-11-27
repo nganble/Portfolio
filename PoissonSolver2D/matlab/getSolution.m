@@ -51,7 +51,7 @@ par.DpyDmy = @(U, I, J) U(I, J + 1) - 2 * U(I, J) + U(I, J - 1);
 
 %% Specifying the forcing and exact solution for testing
 % fun is a struct of function handles
-fun.f = @(x,y,lambda) (10*par.lambda/pi) * exp(-par.lambda^2*((x-0.5).^2 + (y-0.5).^2)) + ...
+fun.f = @(x,y,lambda) (10*par.lambda/pi) * exp(-par.lambda^2*((x-0.5).^2 + (y-0.5).^2)) - ...
                   (10*par.lambda/pi) * exp(-par.lambda^2*((x-0.25).^2 + (y-0.25).^2));
 
 % Plot the forcing

@@ -195,11 +195,12 @@ static inline double get_time(){
 #if TEST == COMPUTE_SOLUTION
 	static const real lambda = 100.0;
 	static inline HD real forcing(real x, real y){
-		real dxp = x + 1.0;
-		real dxm = x - 1.0;
-		return ( 10.0 * lambda / (SQ_ROOT_PI) ) * 
-		( exp(-lambda * lambda * (dxp * dxp + y * y)) 
-		- exp(-lambda * lambda * (dxm * dxm + y * y)) );
+		// Approximate point source at (0.5, 0.5) and sink at (0.25, 0.25), as in the report
+		real dx1 = x - 0.5,  dy1 = y - 0.5;
+		real dx2 = x - 0.25, dy2 = y - 0.25;
+		return ( 10.0 * lambda / PI ) *
+		( exp(-lambda * lambda * (dx1 * dx1 + dy1 * dy1))
+		- exp(-lambda * lambda * (dx2 * dx2 + dy2 * dy2)) );
 	}
 	static inline HD real gxa(real y){
 		return 0.0;

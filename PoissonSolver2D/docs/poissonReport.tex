@@ -577,7 +577,7 @@ Thus, the number of iterations grow like $\mathcal{O}(N)=\mathcal{O}(\sqrt{n})$ 
 \section{Numerical Results}\label{sec:results}
 This section presents the numerical results for the parallel Poisson solver, which is based on the red-black ordering SOR($\omega$) method as discussed in Algorithm~\ref{alg:oneStepSORPoisson} above. The forcing term $f(x,y)$ in the equation~\eqref{eq:poisson2d} is defined as
 \begin{align}
-f(x,y) &= \dfrac{10\lambda}{\pi} e^{-\lambda^2\left( (x-0.5)^2 + (y-0.5)^2 \right)} \notag \\ & +\dfrac{10\lambda}{\pi} e^{-\lambda^2\left( (x-0.25)^2 + (y-0.25)^2 \right)},
+f(x,y) &= \dfrac{10\lambda}{\pi} e^{-\lambda^2\left( (x-0.5)^2 + (y-0.5)^2 \right)} \notag \\ & -\dfrac{10\lambda}{\pi} e^{-\lambda^2\left( (x-0.25)^2 + (y-0.25)^2 \right)},
 \end{align}
 % In this section, we illustrate the numerical results for the parallel solver for Poisson's equation based on Algorithm~\ref{alg:oneStepSORPoisson}. 
 % The function $f(x,y)$ in\eqref{eq:poisson2d} is
@@ -601,7 +601,7 @@ where the value of $\lambda=100$, with the four boundary sides of $u$ is zeros, 
  angle=0,
  origin=c]
  {fig/computed_solution.pdf}
- \caption{ The runtimes and speedups for the MPI test case with $N=128$. \label{fig:forcing_computed_solution}}
+ \caption{The forcing $f(x,y)$ and the computed solution $u(x,y)$. \label{fig:forcing_computed_solution}}
 \end{figure}
 
 To determine the convergence of the iterative solver, we will use the common stopping criterion based on the residual $r_{ij}$, which is defined as follows.
@@ -716,7 +716,7 @@ For the weak scaling test, since the problem size is $n=N^2$, doubling $N$ resul
  {fig/weak_scaling_runtime.pdf}
  \caption{MPI runtime performance for weak scaling in milliseconds. \label{fig:weak_scaling_MPI}}
 \end{figure}
-In an ideal weak scaling scenario, the runtime per iteration would remain constant as the problem size increases in proportion to the number of ranks. For our two-rank case, the runtime per iteration is approximately $0.6$ ms. However, at 128 ranks, this figure increases by roughly $35\%$ to nearly $1.0$ ms. While seemingly small, this overhead becomes significant given the large problem size and the high number of iterations required for convergence, leading to a substantial increase in total execution time. This demonstrates that inter-process communication remains a primary bottleneck for large-scale simulations
+In an ideal weak scaling scenario, the runtime per iteration would remain constant as the problem size increases in proportion to the number of ranks. For our two-rank case, the runtime per iteration is approximately $0.6$ ms. However, at 128 ranks, this figure increases by roughly $61\%$ to nearly $1.0$ ms. While seemingly small, this overhead becomes significant given the large problem size and the high number of iterations required for convergence, leading to a substantial increase in total execution time. This demonstrates that inter-process communication remains a primary bottleneck for large-scale simulations
 \subsection{Parallel using MPI + CUDA results}
 We now present results for the Poisson solver using combined MPI and CUDA parallelization. The test cases utilize grid resolutions $N$ ranging in the set $\{256, 512, 1024, 2048, 4096\}$. At $N=4096$, the system involves over $n\approx 1.6 \times 10^7$ variables (more than 16 million grid points); since the SOR method scales as $\mathcal{O}(n^{3/2})$, these simulations are computationally demanding and provide a good test for our parallel. Note that for $n_p=1$, we only use CUDA parallelization, so there is no communication overhead cost in this case. Also, due to the limited number of resources and the nature of the problem, weak scaling is not tested in this section.
 \begin{figure}[H]
@@ -739,7 +739,7 @@ The runtime for the case $n_p=16$ and compared with the parallel solver implemen
  angle=0,
  origin=c]
  {fig/mpi_cuda_compare.pdf}
- \caption{MPI runtime performance for weak scaling in milliseconds.  }\label{fig:mpi_cuda_compare}
+ \caption{Runtime of the MPI+CUDA solver with $n_p=16$ compared with the CUDA-only solver.}\label{fig:mpi_cuda_compare}
 \end{figure}
 
 \section{Conclusions}
