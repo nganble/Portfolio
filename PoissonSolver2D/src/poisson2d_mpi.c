@@ -1,11 +1,15 @@
-// mpicc -O3 -o -O3 poisson2d_mpi.c -o poisson2d_mpi
-// mpirun -np 2 ./poisson2d_mpi 8 1.0 1e-10 20000
-// mpirun -np 2 ./poisson2d_mpi 1024 2.0 1e-10 20000
-// ----------------------------------------------------------
+// =====================================================================
+// POISSON EQUATION IN 2D: MPI code
+//   Solves u_xx + u_yy = f on (0,1)^2 with Dirichlet boundary conditions,
+//     5-point Laplacian, red-black SOR (omega = 2.0 -> optimal omega = 2/(1+sin(pi h))).
+//   The grid is split in the y-direction; each rank exchanges one ghost line
+//   with its neighbours (MPI_Isend/MPI_Irecv) after the red and after the black update.
 //
-// 			POISSON EQUATION IN 2D (MPI VERSION)
-// 
-// ----------------------------------------------------------
+// Build:   make mpi
+// Run:     mpirun -np 4 ./poisson2d_mpi 1024 2.0 1e-10 20000
+// Args:    N omega tol max_iter   (N interior points per direction, h = 1/(N+1); stop when max residual < tol)
+// Cases:   -DTEST=EXACT_SOLUTION -DSOLUTION=POLY|GAUSSIAN, or -DTEST=COMPUTE_SOLUTION (default)
+// =====================================================================
 
 #include <stdio.h>
 #include<stdlib.h>
@@ -144,10 +148,9 @@ int main(int argc, char *argv[]){
 		printf("----------------------------------------------------------------------\n");
 	}
 	
-	// We will devide in the y direction 
-	// int ny_l, n2a_l, n2b_l;
+	// Split the grid in the y-direction 
 	get_local_index_bounds(np, my_rank, ny, &grid.ny_l, &grid.n2a_l, &grid.n2b_l);
-	// Recompute local values (NEED TO MAKE IT CLEAN LATTER)
+	// Recompute local values
 	int num_ghost_top =0, num_ghost_bottom = 0;
 
 	if (my_rank > 0){
@@ -198,8 +201,6 @@ int main(int argc, char *argv[]){
 		printf("Rank %d out of %d ranks:\n", my_rank, np);
 		printf("nd_l=%d, nd2_l=%d, n2a_l=%d, n2b_l=%d, dx=%f\n",
 				grid.nd_l, grid.nd2_l, grid.n2a_l, grid.n2b_l, grid.dx);
-		// printf("nd2a=%d, nd2b=%d, nd2=%d, dy=%f, ya=%.1f yb=%.1f\n",
-		// 		grid.nd2a, grid.nd2b, grid.nd2, grid.dy, dom.ya, dom.yb);
 
 		printf("-------------------------- grid vector for x --------------------------\n");
 		for (int i1 = grid.nd1a; i1 <= grid.nd1b; i1++){
@@ -250,7 +251,7 @@ int main(int argc, char *argv[]){
 		solver_par.iter_count += 1;
 
 		
-		// Update red points first (UNCOMMENT AFTER DEBUGGING)
+		// Update red points first
 		for (int i2 = grid.nd2a_l + 1; i2 <= grid.nd2b_l - 1; i2++){
 			for (int i1 = (i2 + 1) % 2 + 1; i1 <= grid.nd1b - 1; i1 += 2){
 				u_k(i1, i2) = (1 - solver_par.omega) * u_k(i1, i2) +
@@ -293,7 +294,7 @@ int main(int argc, char *argv[]){
 		DEBUG_PRINT(display_comm, "-------------- after communication --------------\n");
 
 
-		// Update black points (UNCOMMENT AFTER DEBUGGING)
+		// Update black points
 		for (int i2 = grid.nd2a_l + 1; i2 <= grid.nd2b_l - 1; i2++){
 			for (int i1 = i2 % 2 + 1; i1 <= grid.nd1b - 1; i1 += 2){				
 				u_k(i1, i2) = (1 - solver_par.omega) * u_k(i1, i2) +
@@ -308,8 +309,6 @@ int main(int argc, char *argv[]){
 
 		
 		// Communication after black points got updated
-		// MPI_Request requests[4];
-		// int req_count = 0;
 		req_count = 0;
 		if (my_rank != 0 ){
 			// From my current rank post a receive to get data from my_rank - 1
@@ -534,7 +533,7 @@ void get_local_index_bounds(
 	*ni_l = (ni + 1) / np - 1;
 	int r = (ni + 1) % np;
 
-	// (ni+1) may not be a muliple of np, add extra points to the processors on the right side
+	// (ni+1) may not be a multiple of np, add extra points to the processors on the right side
 	if (my_rank >= np - r){
 		*ni_l += 1;
 		*nia_l = (*ni_l) * (np - r)  + (my_rank - np + r) * ( (*ni_l) + 1);

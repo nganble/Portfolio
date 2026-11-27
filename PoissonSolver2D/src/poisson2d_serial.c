@@ -1,11 +1,13 @@
-// gcc -O3 poisson2d_serial.c -o poisson2d_serial
-// ./poisson2d_serial 8 1.0 1e-10 20000
-// ./poisson2d_serial 1024 2.0 1e-10 20000
-// ----------------------------------------------------------
+// =====================================================================
+// POISSON EQUATION IN 2D: SERIAL code
+//   Solves u_xx + u_yy = f on (0,1)^2 with Dirichlet boundary conditions,
+//     5-point Laplacian, red-black SOR (omega = 2.0 -> optimal omega = 2/(1+sin(pi h))).
 //
-// 			POISSON EQUATION IN 2D (SERIAL VERSION)
-// 
-// ----------------------------------------------------------
+// Build:   make serial      (or: make serial CFLAGS="-DTEST=EXACT_SOLUTION -DSOLUTION=GAUSSIAN")
+// Run:     ./poisson2d_serial 1024 2.0 1e-10 20000
+// Args:    N omega tol max_iter   (N interior points per direction, h = 1/(N+1); stop when max residual < tol)
+// Cases:   -DTEST=EXACT_SOLUTION -DSOLUTION=POLY|GAUSSIAN, or -DTEST=COMPUTE_SOLUTION (default)
+// =====================================================================
 
 #include <stdio.h>
 #include<stdlib.h>
@@ -141,7 +143,7 @@ int main(int argc, char *argv[]){
 	}
 
 	/* ------------ Fill in boundary points ---------------- */
-	// For computing the actuall solution --> boundary conditions are zeros
+	// For computing the actual solution --> boundary conditions are zeros
 	#if HAS_EXACT_SOLUTION
 		// Left boundary and right boundaries
 		for (int i2 = grid.nd2a; i2 <= grid.nd2b; i2++){
@@ -176,11 +178,6 @@ int main(int argc, char *argv[]){
 			}
 		}
 
-		// if (debug == 1){
-		// 	printf("-------------- one step: filling in red point -------------- \n");
-		// 	display_grid(u_p, grid);
-		// 	break;
-		// }
 
 		// Update black points
 		for (int i2 = grid.nd2a + 1; i2 <= grid.nd2b - 1; i2++){
@@ -191,11 +188,6 @@ int main(int argc, char *argv[]){
 			}
 		}
 
-		// if (debug == 1){
-		// 	printf("-------------- one step: filling in black point -------------- \n");
-		// 	display_grid(u_p, grid);
-		// 	break;
-		// }
 
 		// Compute the residual after few steps (e.g. 5 or 10 iterations)
 		if (k % 1 == 0){

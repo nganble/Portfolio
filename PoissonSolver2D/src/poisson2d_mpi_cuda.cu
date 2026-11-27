@@ -1,9 +1,9 @@
-
-// ----------------------------------------------------------
-//
-// POISSON EQUATION IN 2D (CUDA CODE)
-// 
-// ----------------------------------------------------------
+// =====================================================================
+// POISSON EQUATION IN 2D: MPI+CUDA code: CUDA kernels and wrappers
+//   Solves u_xx + u_yy = f on (0,1)^2 with Dirichlet boundary conditions,
+//     5-point Laplacian, red-black SOR (omega = 2.0 -> optimal omega = 2/(1+sin(pi h))).
+//   Called from poisson2d_mpi_cuda.c (declarations in poisson2d_cuda.h).
+// =====================================================================
 
 #include <stdio.h>
 #include<stdlib.h>
@@ -21,7 +21,7 @@
 
 
 
-/* Configure the number of therads and blocks */
+/* Configure the number of threads and blocks */
 static inline void compute_launch_config(size_t nd, int *blocks, int *threads){
 	*threads = 256;
 	
@@ -45,7 +45,7 @@ static inline void compute_launch_config(size_t nd, int *blocks, int *threads){
 __global__
 void red_black_step(real *u_p, real	*x_p, real *y_p, grid_t grid, real omega, int color){
 
-	// Unpack necsserary values
+	// Unpack necessary values
 	int nd1   = grid.nd1;
     int nd 	  = grid.nd_l;  	// use local value
     int nd1a  = grid.nd1a;
@@ -93,7 +93,7 @@ void red_black_step(real *u_p, real	*x_p, real *y_p, grid_t grid, real omega, in
 __global__
 void compute_residual(real	*u_p, real *r_p, real *x_p, real *y_p, grid_t grid){
 
-	// Unpack necsserary values
+	// Unpack necessary values
 	int nd1   = grid.nd1;
     int nd 	  = grid.nd_l;  	// use local value
     int nd1a  = grid.nd1a;
@@ -124,7 +124,6 @@ void compute_residual(real	*u_p, real *r_p, real *x_p, real *y_p, grid_t grid){
 
 			res(i1, i2) = (uval - 4 * u_k(i1, i2)) - h_sq * fval;
 			res(i1, i2) = res(i1, i2) / grid.h;
-			// printf("res(%d,%d)=%.3f\n", i1, i2, res(i1, i2));	
 
 		}
 	}

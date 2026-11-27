@@ -1,11 +1,15 @@
-// nvcc -O3 poisson2d_cuda.cu -o poisson2d_cuda
-// ./poisson2d_cuda 8 1.0 1e-10 1000
-// ./poisson2d_cuda 1024 2.0 1e-10 20000
-// ----------------------------------------------------------
+// =====================================================================
+// POISSON EQUATION IN 2D: CUDA code
+//   Solves u_xx + u_yy = f on (0,1)^2 with Dirichlet boundary conditions,
+//     5-point Laplacian, red-black SOR (omega = 2.0 -> optimal omega = 2/(1+sin(pi h))).
+//   Red and black updates, residual and max reduction are CUDA kernels
+//   (unified memory).
 //
-//			POISSON EQUATION IN 2D (CUDA VERSION)
-// 
-// ----------------------------------------------------------
+// Build:   make cuda
+// Run:     ./poisson2d_cuda 1024 2.0 1e-10 20000
+// Args:    N omega tol max_iter   (N interior points per direction, h = 1/(N+1); stop when max residual < tol)
+// Cases:   -DTEST=EXACT_SOLUTION -DSOLUTION=POLY|GAUSSIAN, or -DTEST=COMPUTE_SOLUTION (default)
+// =====================================================================
 
 #include <stdio.h>
 #include<stdlib.h>
@@ -214,9 +218,6 @@ static inline double get_time(){
 
 #endif
 
-// #if TEST == COMPUTE_SOLUTION && defined(SOLUTION)
-// 	#warning "SOLUTION is defined but not used in COMPUTE mode"
-// #endif
 
 
 /* ****** Functions declaration ******** */
@@ -372,7 +373,7 @@ int main(int argc, char *argv[]){
 	}
 
 	/* ------------ Fill in boundary points ---------------- */
-	// For computing the actuall solution --> boundary conditions are zeros
+	// For computing the actual solution --> boundary conditions are zeros
 	#if HAS_EXACT_SOLUTION
 		// Left boundary and right boundaries
 		for (int i2 = grid.nd2a; i2 <= grid.nd2b; i2++){
@@ -411,57 +412,27 @@ int main(int argc, char *argv[]){
 		// --------------- Update red points ----------------- //
 		red_black_step<<<blocks, threads>>>(u_p, x_p, y_p, grid, solver_par.omega, RED);
 
-		// if (debug == 1){
-		// 	printf("-------------- one step: filling in red point -------------- \n");
-		// 	display_grid(u_p, grid);
-		// 	break;
-		// }
 
 		// ---------- Update black points ----------------- //
 		red_black_step<<<blocks, threads>>>(u_p, x_p, y_p, grid, solver_par.omega, BLACK);
 
-		// if (debug == 1){
-		// 	printf("-------------- one step: filling in black point -------------- \n");
-		// 	display_grid(u_p, grid);
-		// 	break;
-		// }
 
 		// Compute the residual after few steps (e.g. 5 or 10 iterations)
 		if ( (k % 1) == 0 ){
 
-			/* Residual before update */
-			// display_grid(r_p, grid);
-
 			compute_residual<<<blocks, threads>>>(u_p, r_p, x_p, y_p, grid);
 
-			/* Check whether the kernal launched successfully */
-			// cudaError_t err = cudaGetLastError();
-			// if (err != cudaSuccess){
-			// 	printf("Launch error: %s\n", cudaGetErrorString(err));
-			// 	break;
-			// }
 
-			/* Compute maximum residual (UNCOMMENT AFTER DEBUGGING) */
+			/* Compute maximum residual */
 			max_res = 0;
 			get_max(r_p, &max_res, grid.nd);
 
 			
-			/* Recompute the residual for checking (serial code) COMMMENT LATER */
-			// max_res = 0;
-			// for (int i2 = nd2a + 1; i2 <= nd2b - 1; i2++){
-			// 	for (int i1 = nd1a + 1; i1 <= nd1b - 1; i1++){
-			// 		res(i1, i2) = u_k(i1 + 1, i2)  + u_k(i1 - 1, i2) - 4 * u_k(i1, i2) +
-			// 		u_k(i1, i2 + 1) + u_k(i1, i2 - 1) - h_sq * forcing(x(i1, i2), y(i1, i2));
 
-			// 		max_res = fmax( max_res, fabs(res(i1, i2)) );
-			// 	}
-			// }
 
 
 			if (max_res < solver_par.tol){
 				printf("SOR converged after %d iterations!\nMax residual: %.2e, ", k, max_res);
-				/* Residual after update */
-				// display_grid(r_p, grid);
 				break;
 			}
 		}
@@ -662,7 +633,7 @@ void get_max(real *u_p, real *max_val, int nd){
 __global__
 void red_black_step(real *u_p, real	*x_p, real *y_p, grid_t grid, real omega, int color){
 
-	// Unpack necsserary values
+	// Unpack necessary values
 	int nd1   = grid.nd1;
     int nd 	  = grid.nd;
     int nd1a  = grid.nd1a;
@@ -708,7 +679,7 @@ void red_black_step(real *u_p, real	*x_p, real *y_p, grid_t grid, real omega, in
 __global__
 void compute_residual(real	*u_p, real *r_p, real *x_p, real *y_p, grid_t grid){
 
-	// Unpack necsserary values
+	// Unpack necessary values
 	int nd1   = grid.nd1;
     int nd 	  = grid.nd;
     int nd1a  = grid.nd1a;
@@ -736,7 +707,6 @@ void compute_residual(real	*u_p, real *r_p, real *x_p, real *y_p, grid_t grid){
 
 			res(i1, i2) = (uval - 4 * u_k(i1, i2))  - h_sq * fval;
 			res(i1, i2) = res(i1, i2) / grid.h;
-			// printf("res(%d,%d)=%.3f\n", i1, i2, res(i1, i2));	
 
 		}
 	}
