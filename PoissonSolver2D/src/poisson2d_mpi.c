@@ -1,0 +1,574 @@
+// =====================================================================
+// POISSON EQUATION IN 2D: MPI code
+//   Solves u_xx + u_yy = f on (0,1)^2 with Dirichlet boundary conditions,
+//     5-point Laplacian, red-black SOR (omega = 2.0 -> optimal omega = 2/(1+sin(pi h))).
+//   The grid is split in the y-direction; each rank exchanges one ghost line
+//   with its neighbours (MPI_Isend/MPI_Irecv) after the red and after the black update.
+//
+// Build:   make mpi
+// Run:     mpirun -np 4 ./poisson2d_mpi 1024 2.0 1e-10 20000
+// Args:    N omega tol max_iter   (N interior points per direction, h = 1/(N+1); stop when max residual < tol)
+// Cases:   -DTEST=EXACT_SOLUTION -DSOLUTION=POLY|GAUSSIAN, or -DTEST=COMPUTE_SOLUTION (default)
+// =====================================================================
+
+#include <stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<stdbool.h>
+#include <math.h>
+#include <float.h>
+#include <string.h>
+#include <time.h>
+#include<mpi.h>
+
+
+/* Shared types, grid macros, test cases (TEST, SOLUTION) and timer (MPI_Wtime) */
+#include "poisson2d_common.h"
+#define USE_MPI 1
+#include "timing.h"
+
+
+/* Macro for printing debug info */
+#define DEBUG_PRINT(flag, mgs) 	\
+	if (debug && (flag)){ 	\
+		debug_print_ranked(my_rank, np, mgs, u_p, grid, ny, solver_par); \
+		goto cleanup; \
+}
+
+/* ****** Functions declaration ******** */
+/* ************************************* */
+
+/* ------------- Allocate vector ------------- */
+void allocate_vectors(
+	real **x_p			/* out */,
+	real **y_p			/* out */,
+	real **u_p			/* out */,
+	real **r_p			/* out */,
+	grid_t g 			/* in */);			
+
+/* ------------- Free vector ----------------- */
+void free_vectors(
+	real *x_p			/* in */,
+	real *y_p			/* in */,
+	real *u_p			/* in */,
+	real *r_p			/* in */);
+
+/* --------- Display the grid ---------------- */
+void display_grid(
+	real *v 		/* in */,
+	grid_t g 		/* in */);
+
+/* ---------- Get command-line args ---------- */
+void get_arguments(
+	const int  	argc		/* in */,
+	char 		*argv[]		/* in */,
+	int 		my_rank		/* in */,
+	int  		*n			/* out */,
+	real 		*omega		/* out */,
+	real 		*tol		/* out */,
+	int  		*k 			/* out */);
+
+/* ----------- Make 2d grid ------------------ */
+grid_t make_grid(
+	domain_t	dom 	/* in */,
+	int 		nx		/* in */,
+	int 		ny		/* in */);
+
+/* ------- Get local bound index  ------------ */
+void get_local_index_bounds(
+	const int 	np			/* in */,
+	const int 	my_rank		/* in */,
+	const int 	ni			/* in */,
+	int 		*ni_l		/* out */,
+	int 		*nia_l		/* out */,
+	int 		*nib_l		/* out */);
+
+/* ----------- Print debug info  ------------- */
+void debug_print_ranked(
+	int 			my_rank 	/* in */,
+	int 			np 			/* in */,
+	const char 		*msg 		/* in */,
+	real 			*u_p 		/* in */,
+	grid_t 			grid 		/* in */,
+	int 			ny 			/* in */,
+	solver_par_t 	solver_par 	/* in */);
+
+/* ------------- Main function --------------- */ 
+int main(int argc, char *argv[]){
+
+	int np;
+	int my_rank;
+	MPI_Init(NULL, NULL);
+	MPI_Comm_size(MPI_COMM_WORLD, &np);
+	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+	int debug = 1;
+
+	// Problem domains
+	const domain_t dom ={
+		.xa = 0.0, .xb = 1.0,
+		.ya = 0.0, .yb = 1.0
+	};
+	
+	// Default values but can get different values from the command line
+	int nx;
+
+	solver_par_t solver_par;
+	solver_par.iter_count = 0;
+
+	real max_res = 0.0;
+	real max_res_g = 0.0;
+	
+	// Get input arguments
+	get_arguments(argc, argv, my_rank, &nx, &solver_par.omega, &solver_par.tol, &solver_par.max_iter);
+
+	// Set ny=nx for this particular problem
+	nx += 1; 
+	int ny = nx;
+
+	// Make grid
+	grid_t grid = make_grid(dom, nx, ny);
+
+	if (my_rank == 0){
+		printf("**************************************************************************\n");
+	}
+
+	// Use optimal value for omega if solver_par.omega = 2.0
+	if (fabs(solver_par.omega - 2.0) < 1e-15 ){
+		solver_par.omega = 2 / (1 + sin(PI * grid.h));
+		if(my_rank == 0){
+			printf("Use optimal value for omega.\n");
+		}
+	}
+
+	if (my_rank == 0){
+		printf("-----------------------------------------------------------------------\n");
+		printf("2D Poisson Solver (MPI): nx=ny=%d, np=%d\nomega=%g, tol=%.2e, max_iter=%d\n",
+			nx - 1, np, solver_par.omega, solver_par.tol, solver_par.max_iter);
+		printf("----------------------------------------------------------------------\n");
+	}
+	
+	// Split the grid in the y-direction 
+	get_local_index_bounds(np, my_rank, ny, &grid.ny_l, &grid.n2a_l, &grid.n2b_l);
+	// Recompute local values
+	int num_ghost_top =0, num_ghost_bottom = 0;
+
+	if (my_rank > 0){
+		num_ghost_bottom += 1;
+	}
+	if (my_rank < np - 1){
+		num_ghost_top += 1;
+	}
+	grid.nd2a_l = grid.n2a_l - num_ghost_bottom;
+	grid.nd2b_l = grid.n2b_l + num_ghost_top;
+	grid.nd2_l 	= grid.nd2b_l - grid.nd2a_l + 1;
+	grid.nd_l 	= grid.nd1 * grid.nd2_l;
+
+	// -------- Options to debug ----------
+	bool display_ginfo 		= false;
+	bool display_mesh 		= false;
+#if HAS_EXACT_SOLUTION
+	bool display_ini 		= false;
+	bool display_err 		= false;
+#endif
+	bool display_one_step_r	= false;
+	bool display_one_step_b = false;
+	bool display_comm 		= false;
+	bool display_res 		= false;
+
+	if (debug == 1 && display_ginfo == true){
+		printf("Rank %d out of %d ranks: ny=%d, ny_l=%d, n2a_l=%d, n2b_l=%d, nd2a_l=%d, nd2b_l=%d, omega=%.2f\n",
+			my_rank, np, ny, grid.ny_l, grid.n2a_l, grid.n2b_l, grid.nd2a_l, grid.nd2b_l, solver_par.omega);
+		MPI_Finalize();
+		return 0;
+	}
+
+	// Declare grid vectors
+	real *x_p, *y_p, *u_p, *r_p;
+
+	allocate_vectors(&x_p, &y_p, &u_p, &r_p, grid);
+
+	/* ------------ Fill in grid points ---------------- */
+	for (int i1 = grid.nd1a; i1 <= grid.nd1b; i1++){
+		x(i1) = dom.xa + (i1 - grid.n1a) * grid.dx;
+	}
+
+	for (int i2 = grid.nd2a_l; i2 <= grid.nd2b_l; i2++){
+		y(i2) = dom.ya + (i2 - grid.n2a) * grid.dy;
+ 	}
+
+	if ( (my_rank==0) && (debug == 1) && (display_mesh == true) ){
+		printf("Rank %d out of %d ranks:\n", my_rank, np);
+		printf("nd_l=%d, nd2_l=%d, n2a_l=%d, n2b_l=%d, dx=%f\n",
+				grid.nd_l, grid.nd2_l, grid.n2a_l, grid.n2b_l, grid.dx);
+
+		printf("-------------------------- grid vector for x --------------------------\n");
+		for (int i1 = grid.nd1a; i1 <= grid.nd1b; i1++){
+			printf("x[%d]=%.3f\n", i1, x(i1));
+		}
+
+		printf("-------------------------- grid vector for y -------------------------- \n");
+		for (int i2 = grid.nd2a_l; i2 <= grid.nd2b_l; i2++){
+			printf("y[%d]=%.3f\n", i2, y(i2));
+		}
+		
+	}
+
+	/* ------------ Fill in boundary points ---------------- */
+	// For computing the actual solution --> boundary conditions are zeros
+	#if HAS_EXACT_SOLUTION
+		// Left boundary and right boundaries
+		for (int i2 = grid.nd2a_l; i2 <= grid.nd2b_l; i2++){
+			u_k(grid.n1a, i2) = uexact(dom.xa, y(i2));
+			u_k(grid.n1b, i2) = uexact(dom.xb, y(i2));
+		}
+
+		// Bottom and top boundaries	
+		if (my_rank == 0){
+			for (int i1 = grid.nd1a; i1 <= grid.nd1b; i1++){
+				u_k(i1, grid.n2a) = uexact(x(i1), dom.ya);
+			}
+		}
+
+		if (my_rank == np - 1){
+			for (int i1 = grid.nd1a; i1 <= grid.nd1b; i1++){
+				u_k(i1, grid.n2b) = uexact(x(i1), dom.yb);
+			}
+		}
+		
+
+		if ( (debug == 1) && (display_ini == true) ){
+			printf("-------------- initial guess u_k with boundaries fill in -------------- \n");
+			display_grid(u_p, grid);
+			goto cleanup;
+		}
+	#endif
+
+	double t_start = get_time();
+	/* ------------------ SOR iterative solver --------------------- */
+	for (int k = 1; k <= solver_par.max_iter; k++){
+
+		solver_par.iter_count += 1;
+
+		
+		// Update red points first
+		for (int i2 = grid.nd2a_l + 1; i2 <= grid.nd2b_l - 1; i2++){
+			for (int i1 = (i2 + 1) % 2 + 1; i1 <= grid.nd1b - 1; i1 += 2){
+				u_k(i1, i2) = (1 - solver_par.omega) * u_k(i1, i2) +
+				(solver_par.omega / 4) * ( u_k(i1 + 1, i2) + u_k(i1 - 1, i2) + u_k(i1, i2 + 1) + u_k(i1, i2 - 1) -
+				grid.h_sq * forcing(x(i1), y(i2)) );		
+			}
+		}
+
+		// Check if red points are updated correctly
+		DEBUG_PRINT(display_one_step_r, "-------------- one step: filling in red points --------------\n");
+
+		// Communication between processes
+		MPI_Request requests[4];
+		int req_count = 0;
+		if (my_rank != 0 ){
+			// From my current rank post a receive to get data from my_rank - 1
+			MPI_Irecv(&u_k(grid.nd1a, grid.nd2a_l), grid.nd1, MPI_DOUBLE, my_rank - 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+		}
+
+		if (my_rank != np - 1){
+			// From my current rank post a receive to get data from my_rank + 1
+			MPI_Irecv(&u_k(grid.nd1a, grid.nd2b_l), grid.nd1, MPI_DOUBLE, my_rank + 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+
+		}
+
+		if (my_rank != np - 1){
+			// From my_rank send to my_rank + 1
+			MPI_Isend(&u_k(grid.nd1a, grid.n2b_l), grid.nd1, MPI_DOUBLE, my_rank + 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+		}
+
+		if (my_rank != 0){
+			// From my_rank send to my_rank - 1
+			MPI_Isend(&u_k(grid.nd1a, grid.n2a_l), grid.nd1, MPI_DOUBLE, my_rank - 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+		}
+
+		// Wait for the communication to finish
+		MPI_Waitall(req_count, requests, MPI_STATUSES_IGNORE);
+
+		// Check the communication
+		DEBUG_PRINT(display_comm, "-------------- after communication --------------\n");
+
+
+		// Update black points
+		for (int i2 = grid.nd2a_l + 1; i2 <= grid.nd2b_l - 1; i2++){
+			for (int i1 = i2 % 2 + 1; i1 <= grid.nd1b - 1; i1 += 2){				
+				u_k(i1, i2) = (1 - solver_par.omega) * u_k(i1, i2) +
+				(solver_par.omega / 4) * ( u_k(i1 + 1, i2) + u_k(i1 - 1, i2) + u_k(i1, i2 + 1) + u_k(i1, i2 - 1) -
+				grid.h_sq * forcing(x(i1), y(i2)) );				
+			}
+		}
+
+		// Check if blacks points are updated correctly
+		DEBUG_PRINT(display_one_step_b, "-------------- one step: filling in black points --------------\n");
+		
+
+		
+		// Communication after black points got updated
+		req_count = 0;
+		if (my_rank != 0 ){
+			// From my current rank post a receive to get data from my_rank - 1
+			MPI_Irecv(&u_k(grid.nd1a, grid.nd2a_l), grid.nd1, MPI_DOUBLE, my_rank - 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+		}
+
+		if (my_rank != np - 1){
+			// From my current rank post a receive to get data from my_rank + 1
+			MPI_Irecv(&u_k(grid.nd1a, grid.nd2b_l), grid.nd1, MPI_DOUBLE, my_rank + 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+
+		}
+
+		if (my_rank != np - 1){
+			// From my_rank send to my_rank + 1
+			MPI_Isend(&u_k(grid.nd1a, grid.n2b_l), grid.nd1, MPI_DOUBLE, my_rank + 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+		}
+
+		if (my_rank != 0){
+			// From my_rank send to my_rank - 1
+			MPI_Isend(&u_k(grid.nd1a, grid.n2a_l), grid.nd1, MPI_DOUBLE, my_rank - 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+		}
+
+		// Wait for the communication to finish
+		MPI_Waitall(req_count, requests, MPI_STATUSES_IGNORE);
+
+		
+		// Compute the residual
+		if (k % 1 == 0){
+			max_res = 0;
+			for (int i2 = grid.nd2a_l + 1; i2 <= grid.nd2b_l - 1; i2++){
+				for (int i1 = grid.nd1a + 1; i1 <= grid.nd1b - 1; i1++){
+					res(i1, i2) = ( u_k(i1 + 1, i2)  + u_k(i1 - 1, i2) - 4 * u_k(i1, i2) +
+					u_k(i1, i2 + 1) + u_k(i1, i2 - 1) ) - grid.h_sq * forcing(x(i1), y(i2));
+					res(i1, i2) = res(i1, i2) / grid.h;
+					max_res = fmax( max_res, fabs(res(i1, i2)) );
+				}
+			}
+
+			// Gather maximum residual in all ranks
+			max_res_g = max_res;
+			MPI_Barrier(MPI_COMM_WORLD);
+			MPI_Allreduce(&max_res, &max_res_g, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+			if (max_res_g < solver_par.tol){
+				if (my_rank==0){
+					printf("SOR converged after %d iterations!\nMax residual: %.2e, ", k, max_res_g);
+				}
+				break;
+			}
+		}
+
+
+	} /* End SOR loop */
+	double t_end = get_time();
+	
+
+	if ( (my_rank==0) && (debug == 1) && (display_res == true) ){
+		printf("-------------- SOR with w=%.2f: Residual -------------- \n", solver_par.omega);
+		display_grid(r_p, grid);
+		printf("Max residual: %.e\n", max_res);
+	}
+
+	if (solver_par.iter_count == solver_par.max_iter && my_rank == 0){
+		printf("SOR failed to converge after %d iterations! Max residual: %.2e, ", solver_par.iter_count, max_res_g);
+	}
+
+	double run_time = t_end - t_start;
+	if (my_rank == 0){
+		printf("solver time: %.4f(s)\n", run_time);
+		printf("Time per iter: %.4f(ms)\n", 1000.0 * run_time / solver_par.iter_count);
+	}
+
+	#if HAS_EXACT_SOLUTION
+		real max_err = 0.0;
+		real max_err_g = 0.0;
+
+		real *err_p;
+		err_p = calloc(grid.nd_l, sizeof(*err_p));
+
+		for (int i2 = grid.nd2a_l; i2 <= grid.nd2b_l; i2++){
+			for (int i1 = grid.nd1a; i1 <= grid.nd1b; i1++){
+				err(i1, i2) = fabs(uexact(x(i1), y(i2)) - u_k(i1, i2));
+				max_err = fmax( max_err, err(i1, i2) );
+			}
+		}
+		MPI_Allreduce(&max_err, &max_err_g, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+		if (my_rank == 0){
+			if ( (debug == 1) && (display_err == true) ){
+				printf("-------------------- Maximum Error -------------------- \n");
+				display_grid(err_p, grid);
+			}
+			printf("Max error: %.2e\n", max_err_g);
+		}
+
+		free(err_p);
+
+	#endif
+	
+	if (my_rank == 0){
+		printf("\n");
+	}
+
+	cleanup:
+		// Free all allocated vectors
+		free_vectors(x_p, y_p, u_p, r_p);
+		MPI_Finalize();
+		return 0;
+
+} /* main */
+
+
+/* ****** Functions definition ********* */
+/* ************************************* */
+
+void allocate_vectors(
+	real 	**x_p			/* out */,
+	real 	**y_p			/* out */,
+	real 	**u_p			/* out */,
+	real 	**r_p			/* out */,
+	grid_t 	grid 			/*in*/){
+
+	*x_p = malloc(grid.nd1 * sizeof(real));
+	*y_p = malloc(grid.nd2_l * sizeof(real));
+	*u_p = calloc(grid.nd_l, sizeof(real));		// set all entires of u_p to be zeros
+	*r_p = calloc(grid.nd_l, sizeof(real));		// set all entires of r_p to be zeros
+
+}	/* allocate_vectors */
+
+
+void free_vectors(
+	real *x_p			/* in */,
+	real *y_p			/* in */,
+	real *u_p			/* in */,
+	real *r_p			/* in */){
+
+	free(x_p);
+	free(y_p);
+	free(u_p);
+	free(r_p);
+
+}	/* free_vectors */
+
+void display_grid(
+	real *v 		/* in */,
+	grid_t grid 	/* in */){
+
+	for (int i2 = grid.nd2a_l; i2 <= grid.nd2b_l; i2 ++){
+		printf("v^T[:,%d]= [", i2);
+		for (int i1 = grid.nd1a; i1 <= grid.nd1b; i1 ++){
+			printf("%.3f ", v[i1 - grid.nd1a + grid.nd1 * (i2 - grid.nd2a_l)]);
+		}
+		printf("]\n");
+
+	}
+
+}	/* display_grid_function */
+
+void get_arguments(
+	const int  	argc		/* in */,
+	char 		*argv[]		/* in */,
+	int 		my_rank		/* in */,
+	int  		*n			/* out */,
+	real 		*omega		/* out */,
+	real 		*tol		/* out */,
+	int  		*k 			/* out */){
+
+	if (argc != 5){
+		if (my_rank == 0){
+			printf("Usage: ./poisson2d n omega tol k!\n");
+			
+		}
+		MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+		
+	}
+
+	*n 		= strtol(argv[1], NULL, 10);
+	*omega 	= strtod(argv[2], NULL);
+	*tol 	= strtod(argv[3], NULL);
+	*k		= strtol(argv[4], NULL, 10);
+
+}	/* get_arguments */
+
+/* ------- Make 2d grid ------- */
+grid_t make_grid(
+	domain_t	dom 	/* in */,
+	int 		nx		/* in */,
+	int 		ny		/* in */){
+
+	grid_t grid;
+
+	grid.num_ghost = 0; // Assume Dichlet boundary conditions
+
+	grid.n1a 	= 0;
+	grid.n1b 	= grid.n1a + nx;
+	grid.nd1a 	= grid.n1a - grid.num_ghost;
+	grid.nd1b   = grid.n1b + grid.num_ghost;
+	grid.nd1 	= grid.nd1b - grid.nd1a + 1;
+
+	grid.n2a 	= 0;
+	grid.n2b 	= grid.n2a + ny;
+	grid.nd2a 	= grid.n2a - grid.num_ghost;
+	grid.nd2b 	= grid.n2b + grid.num_ghost;
+	grid.nd2 	= grid.nd2b - grid.nd2a + 1;
+
+	grid.nd = grid.nd1 * grid.nd2;
+	grid.dx = (dom.xb - dom.xa) / nx;
+	grid.dy = (dom.yb - dom.ya) / ny;
+	grid.h  = grid.dx;
+	grid.h_sq  = grid.h * grid.h;
+
+	return grid;
+} /* make_grid */
+
+void get_local_index_bounds(
+	const int 	np			/* in */,
+	const int 	my_rank		/* in */,
+	const int 	ni			/* in */,
+	int 		*ni_l		/* out */,
+	int 		*nia_l		/* out */,
+	int 		*nib_l		/* out */){
+
+	*ni_l = (ni + 1) / np - 1;
+	int r = (ni + 1) % np;
+
+	// (ni+1) may not be a multiple of np, add extra points to the processors on the right side
+	if (my_rank >= np - r){
+		*ni_l += 1;
+		*nia_l = (*ni_l) * (np - r)  + (my_rank - np + r) * ( (*ni_l) + 1);
+	}
+	else{
+		*nia_l = my_rank * ( (*ni_l) + 1);
+	}
+	
+
+	*nib_l = (*nia_l) + (*ni_l);
+
+} /* get_local_index_bounds */
+
+/* ----------- Print debug info  ------------- */
+void debug_print_ranked(
+	int 			my_rank 	/* in */,
+	int 			np 			/* in */,
+	const char 		*msg 		/* in */,
+	real 			*u_p 		/* in */,
+	grid_t 			grid 		/* in */,
+	int 			ny 			/* in */,
+	solver_par_t 	solver_par 	/* in */){
+
+	for (int r = 0; r < np; r++){
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (my_rank == r){
+			printf("%s", msg);
+			printf("Rank %d out of %d ranks: ny=%d, ny_l=%d,"
+				" n2a_l=%d, n2b_l=%d, nd2a_l=%d, nd2b_l=%d, omega=%.2f\n",
+				my_rank, np, ny, grid.ny_l, grid.n2a_l, 
+				grid.n2b_l, grid.nd2a_l, grid.nd2b_l, solver_par.omega);
+			display_grid(u_p, grid);
+			fflush(stdout);
+		}
+	}
+	MPI_Barrier(MPI_COMM_WORLD);
+} /* debug_print_ranked */
+
