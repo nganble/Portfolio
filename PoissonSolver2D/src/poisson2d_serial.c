@@ -17,186 +17,10 @@
 #include <time.h>
 
 
-/* New type 'real' which is equivalent to a 'double' */
-typedef double real;
+/* Shared types, grid macros, test cases (TEST, SOLUTION) and timer */
+#include "poisson2d_common.h"
+#include "timing.h"
 
-/* Struct for domain in 2d */
-typedef struct {
-	real xa, xb, ya, yb;
-} domain_t;
-
-/* Struct for 2d grid */
-typedef struct {
-	int num_ghost;
-	int n1a, n1b, nd1a, nd1b, nd1;
-	int n2a, n2b, nd2a, nd2b, nd2;
-	int nd;
-	real dx, dy, h, h_sq;
-} grid_t;
-
-/* Struct for SOR solver parameters */
-typedef struct {
-	real omega;
-	real tol;
-	int max_iter;
-	int iter_count;
-} solver_par_t;
-
-
-#define PI 3.14159265358979323846
-#define SQ_ROOT_PI 1.77245385090551602729
-
-/* Macros for grid points and grid functions */
-#define x(i1) x_p[(i1) - grid.nd1a]
-#define y(i2) y_p[(i2) - grid.nd2a]
-#define u_k(i1, i2) u_p[( (i1) - grid.nd1a ) + grid.nd1 * ( (i2) - grid.nd2a )]
-#define res(i1, i2) r_p[( (i1) - grid.nd1a) + grid.nd1 * ( (i2) - grid.nd2a )]
-#define err(i1, i2) err_p[( (i1) - grid.nd1a ) + grid.nd1 * ( (i2) - grid.nd2a )]
-
-
-#ifndef USE_POWER9
-#define USE_POWER9 0
-#endif
-
-#ifndef USE_MPI
-#define USE_MPI 0
-#endif
-
-# if USE_POWER9
-
-static inline unsigned long long aimos_clock_read(void)
-{
-    unsigned int tbl, tbu0, tbu1;
-    do {
-        __asm__ __volatile__ ("mftbu %0" : "=r"(tbu0));
-        __asm__ __volatile__ ("mftb %0"  : "=r"(tbl));
-        __asm__ __volatile__ ("mftbu %0" : "=r"(tbu1));
-    } while (tbu0 != tbu1);
-
-    return (((unsigned long long)tbu0) << 32) | tbl;
-}
-
-#endif
-
-static inline double get_time(){
-#if USE_POWER9
-
-	/* Convert to seconds */
-	const double freq = 512000000.0;
-	return (double) aimos_clock_read() / freq;
-
-#elif USE_MPI
-
-	return MPI_Wtime();
-
-#else
-
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec + 1e-9 * ts.tv_nsec;
-
-#endif
-}
-
-
-/* Test solutions and options */
-#define EXACT_SOLUTION 1
-#define COMPUTE_SOLUTION 2
-
-#ifndef TEST
-#define TEST COMPUTE_SOLUTION
-#endif
-
-
-#define POLY 1
-#define GAUSSIAN 2
-
-
-#ifndef SOLUTION
-#define SOLUTION POLY
-#endif
-
-#if SOLUTION == POLY
-	static const real a0 = 0.5, a1 = 0.7, a2 = -0.3, a3 = -0.2;
-	static const real b0 = 0.75, b1 = -0.45, b2 = -0.3, b3 = 0.25;
-
-	static inline real uexact(real x, real y){
-		return 	( a0 + x * ( a1 + x * ( a2 + x * a3 ) ) ) *
-				( b0 + y * ( b1 + y * ( b2 + y * b3 ) ) );
-	}
-
-	static inline real uexact_xx(real x, real y){
-		return 	(2.0 * a2 + 6.0 * x * a3) *
-				( b0 + y * ( b1 + y * ( b2 + y * b3 ) ) );
-	}
-
-	static inline real uexact_yy(real x, real y){
-		return 	( a0 + x * ( a1 + x * ( a2 + x * a3 ) ) ) *
-				(2.0 * b2 + 6.0 * y * b3);
-	}
-
-#elif SOLUTION == GAUSSIAN
-	static const real kx = 2.0, ky = 2.0;
-	static const real x_0 = 0.3, y_0 = 0.7;
-
-	static inline real uexact(real x, real y){
-		real dx = x - x_0;
-		real dy = y - y_0;
-		return exp(-kx * dx * dx) * exp(-ky * dy * dy);
-	}
-
-	static inline real uexact_xx(real x, real y){
-		real dx = x - x_0;
-		real dy = y - y_0;
-		return (4 * kx * kx * dx * dx - 2 * kx) * exp(-kx * dx * dx) * exp(-ky * dy * dy);
-	}
-
-	static inline real uexact_yy(real x, real y){
-		real dx = x - x_0;
-		real dy = y - y_0;
-		return (4 * ky * ky * dy * dy - 2 * ky) * exp(-kx * dx * dx) * exp(-ky * dy * dy);
-	}
-
-#endif
-
-#if TEST == EXACT_SOLUTION
-	static inline real forcing(real x, real y){
-		return uexact_xx(x, y) + uexact_yy(x, y);
-	}
-
-	#define HAS_EXACT_SOLUTION 1
-
-#endif
-
-#if TEST == COMPUTE_SOLUTION
-	static const real lambda = 100.0;
-	static inline real forcing(real x, real y){
-		real dxp = x + 1.0;
-		real dxm = x - 1.0;
-		return ( 10.0 * lambda / (SQ_ROOT_PI) ) * 
-		( exp(-lambda * lambda * (dxp * dxp + y * y)) 
-		- exp(-lambda * lambda * (dxm * dxm + y * y)) );
-	}
-	static inline real gxa(real y){
-		return 0.0;
-	}
-	static inline real gxb(real y){
-		return 0.0;
-	}
-	static inline real gya(real x){
-		return 0.0;
-	}
-	static inline real gyb(real x){
-		return 0.0;
-	}
-
-	#define HAS_EXACT_SOLUTION 0
-
-#endif
-
-// #if TEST == COMPUTE_SOLUTION && defined(SOLUTION)
-// 	#warning "SOLUTION is defined but not used in COMPUTE mode"
-// #endif
 
 /* ****** Functions declaration ******** */
 /* ************************************* */
@@ -522,6 +346,11 @@ grid_t make_grid(
 	grid.nd2a 	= grid.n2a - grid.num_ghost;
 	grid.nd2b 	= grid.n2b + grid.num_ghost;
 	grid.nd2 	= grid.nd2b - grid.nd2a + 1;
+
+	// The serial grid is one block: the local (_l) bounds used by the macros in
+	// poisson2d_common.h are the global ones
+	grid.nd2a_l = grid.nd2a;
+	grid.nd2b_l = grid.nd2b;
 
 	grid.nd = grid.nd1 * grid.nd2;
 	grid.dx = (dom.xb - dom.xa) / nx;
