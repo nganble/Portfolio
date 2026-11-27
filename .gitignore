@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Editors
+*.swp
+*~
+
+# MATLAB autosave
+*.asv
+
+# LaTeX build files
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
+
+# Compiled objects
+*.o
+*.exe
