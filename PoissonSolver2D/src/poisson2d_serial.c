@@ -137,7 +137,7 @@ static inline double get_time(){
 
 #elif SOLUTION == GAUSSIAN
 	static const real kx = 2.0, ky = 2.0;
-	static const real x_0 = 0.5, y_0 = 0.5;
+	static const real x_0 = 0.3, y_0 = 0.7;
 
 	static inline real uexact(real x, real y){
 		real dx = x - x_0;
