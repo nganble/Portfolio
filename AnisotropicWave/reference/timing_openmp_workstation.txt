@@ -1,0 +1,12 @@
+# OpenMP timing: const poly, nx=3000, tFinal=0.1, numSteps=236, best of 3 runs
+# machine=workstation  cpu=AMD EPYC 9455P 48-Core Processor (96 cores)
+# compiler=g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0  flags=-O3  commit=c728ec4  date=2026-11-27
+# S_ser, E_ser: relative to the serial code;  S_1, E_1: relative to openmp with threads=1
+code     threads  min(s)      median(s)   S_ser   E_ser   S_1     E_1    
+serial   1        1.260e+01   1.260e+01   1.00    1.00    -       -      
+openmp   1        1.290e+01   1.300e+01   0.98    0.98    1.00    1.00   
+openmp   2        6.500e+00   6.650e+00   1.94    0.97    1.98    0.99   
+openmp   4        3.360e+00   3.400e+00   3.75    0.94    3.84    0.96   
+openmp   8        2.280e+00   2.290e+00   5.53    0.69    5.66    0.71   
+openmp   16       1.130e+00   1.140e+00   11.15   0.70    11.42   0.71   
+openmp   32       5.840e-01   6.010e-01   21.58   0.67    22.09   0.69   

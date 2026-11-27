@@ -8,12 +8,13 @@
 #   MACHINE=workstation NP="1 2 4 8 16" ./runTimingMPI.sh
 #   NX=1024 TFINAL=0.1 REPEAT=5 ./runTimingMPI.sh
 #   MPIRUN="mpirun" ./runTimingMPI.sh          MPI without --timeout (e.g. MPICH)
-# Output: printed and saved to reference/timing_mpi_<MACHINE>.txt
+#   COEFF=VAR TFINAL=0.01 ./runTimingMPI.sh   variable coefficients (smaller dt: use a smaller tFinal)
+# Output: printed and saved to reference/timing_mpi_<MACHINE>.txt (COEFF=VAR: timing_mpi_var_<MACHINE>.txt)
 
 set -u
 cd "$(dirname "$0")"
 
-NX=${NX:-2048}
+NX=${NX:-3000}   # avoid nx near a power of two (cache conflicts, about 3x slower at 2048)
 TFINAL=${TFINAL:-0.1}
 NP=${NP:-"1 2 4 5 8 10"}
 REPEAT=${REPEAT:-3}
@@ -22,9 +23,11 @@ MPIRUN=${MPIRUN:-"mpirun --timeout 300"}
 # Same compiler for serial and MPI: macOS Homebrew GCC, Linux system GCC
 if [ "$(uname -s)" = Darwin ]; then CXX=${CXX:-g++-16}; else CXX=${CXX:-g++}; fi
 export OMPI_CXX=$CXX MPICH_CXX=$CXX     # compiler used by mpicxx (Open MPI / MPICH)
-DEFS="-DCOEFF=CONS -DSOLUTION=POLY"
+COEFF=${COEFF:-CONS}                    # CONS | VAR
+DEFS="-DCOEFF=$COEFF -DSOLUTION=POLY"
 REF=../reference
-OUTFILE="$REF/timing_mpi_${MACHINE}.txt"
+if [ "$COEFF" = CONS ]; then caseName="const poly"; OUTFILE="$REF/timing_mpi_${MACHINE}.txt"
+else caseName="var poly"; OUTFILE="$REF/timing_mpi_var_${MACHINE}.txt"; fi
 
 BUILD=$(mktemp -d)
 trap 'rm -rf "$BUILD"' EXIT
@@ -56,7 +59,7 @@ timeRuns() {
 }
 
 {
-    echo "# MPI timing: const poly, nx=$NX, tFinal=$TFINAL, numSteps=$numSteps, best of $REPEAT runs"
+    echo "# MPI timing: $caseName, nx=$NX, tFinal=$TFINAL, numSteps=$numSteps, best of $REPEAT runs"
     echo "# machine=$MACHINE  cpu=$cpu"
     echo "# compiler=$compiler (via mpicxx, $mpiver)  flags=-O3  commit=$commit  date=$(date +%Y-%m-%d)"
     echo "# S_ser, E_ser: relative to the serial code;  S_1, E_1: relative to mpi with np=1"

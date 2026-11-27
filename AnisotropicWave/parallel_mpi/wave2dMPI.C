@@ -1,29 +1,32 @@
-// make            (or: mpicxx -O3 -o wave2dMPI wave2dMPI.C)
-// mpirun -np 4 ./wave2dMPI -tFinal=0.5 -nx=80 -debug=0
-// mpirun -np 4 ./wave2dMPI -tFinal=0.1 -nx=2048 -debug=0   (test for speedup)
-// -debug>0 writes debug/debugFileNp<np>Proc<rank>.debug (the folder debug/ must exist)
 // =====================================================================
+// ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS: MPI code
+//   rho w_tt = div(m grad w) + f  on (xa,xb) x (ya,yb), Dirichlet boundary conditions,
+//   explicit second-order scheme (see docs/anisotropicWaveScheme.tex)
+//   The grid is split in the y-direction: each rank owns a block of rows plus one
+//   ghost line above and below, exchanged with MPI_Sendrecv after each step.
 //
-// ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS
-//
+// Build:   make                         (default test case: COEFF=CONS, SOLUTION=POLY)
+//          make CXXFLAGS="-O3 -Wall -DCOEFF=VAR -DSOLUTION=POLY"
+// Run:     mpirun -np 4 ./wave2dMPI -nx=80 -tFinal=0.5
+//          mpirun -np 4 ./wave2dMPI -nx=3000 -tFinal=0.1      (timing)
+// Options: -nx=<i> -ny=<i> -tFinal=<f> -debug=<i> -saveMatlab=[0|1|2] -matlabFileName=<s>
+//          saveMatlab=1: write a Matlab file with the parameters, =2: also x, y, u and the error
+//          debug=1: write debug/debugFileNp<np>Proc<rank>.debug (the folder is created if needed)
+//          debug=2: errors after the first steps, debug=3: error of U1, debug=4: grid points (nx <= 16)
 // =====================================================================
-// Solver the anisotropic equation in two-dimension
 
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
 #include <assert.h>
 #include <mpi.h>
-#include <limits.h>
+#include <sys/stat.h>   // mkdir
+#include <errno.h>
+// getLocalIndexBounds(): split the rows between the ranks
 #include "getLocalIndexBounds.h"
-#include "parseCommand.h"
-#define REAL_EPSILON DBL_EPSILON
+// parseCommand(): read the command line options
+#include "../common/parseCommand.h"
 #define REAL_MIN DBL_MIN
-
-// define this to indicate were are using MPI
-#ifndef USE_PPP
-	#define USE_PPP
-#endif
 
 // Define a new type "Real" which is equivalent to a "double"
 typedef double Real;
@@ -33,54 +36,21 @@ using std::string;
 using std::max;
 using std::min;
 
-#include <ctime>
-// Function return the current wall-clock time in seconds
-inline double getCPU()
-{
-	#ifdef USE_PPP
-		return MPI_Wtime(); // use MPI timer
-	#else
-		return ( 1.0*std::clock() )/CLOCKS_PER_SEC ;
-	#endif
-}
+// getCPU(): wall-clock time (MPI_Wtime)
+#include "../common/getCPU.h"
 
-
-// function to write an array to a matlab reabable file:
+// writeMatlabArray(): write an array to a Matlab readable file
 #include "writeMatlabArray.h"
 
-
-// Macros to use later
-#define x(i1,i2) x_p[0][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define y(i1,i2) x_p[1][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define up(i1,i2) u_p[prev][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define uc(i1,i2) u_p[cur ][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define un(i1,i2) u_p[next][(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define err(i1,i2) errCPU_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define rho(i1,i2) rho_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m11(i1,i2) m11_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m12(i1,i2) m12_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m21(i1,i2) m21_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-#define m22(i1,i2) m22_p[(i1 - nd1a) + nd1 * (i2 - nd2a_l)]
-
-
-// Function to allocate vectors
-void allocateVectors( 
-			double** x_p, double** y_p,
-			double** up_p, double** un_p,
-			double** uc_p, double** errCPU,
-			double** rho_p, double** m11_p,
-			double** m12_p, double** m21_p,
-			double** m22_p, int nd);
-
-// Function to free all allocated vectors
-void freeVectors( 
-			double* x_p, double* y_p,
-			double* up_p, double* un_p,
-			double* uc_p, double* errCPU_p,
-			double* rho_p, double* m11_p,
-			double* m12_p, double* m21_p,
-			double* m22_p);
-
+// Position of point (i1,i2) in the local arrays: rows are stored with the padded stride ld,
+// counted from the first stored local row nd2a_l
+#define IDX(i1, i2) ((i1) - nd1a + ld * ((i2) - nd2a_l))
+// Array layout and macros x, y, up, uc, un, err, rho, m11, m12, m21, m22; allocateVectors, freeVectors
+#include "../common/grid.h"
+// L_h (the spatial operator) as the macro LH(u, i1, i2)
+#include "../common/stencil.h"
+// printCase, printResults (header and result lines)
+#include "../common/output.h"
 
 int main(int argc, char *argv[])
 {
@@ -88,19 +58,15 @@ int main(int argc, char *argv[])
 	// Determine the rank of the current process
 	int myRank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
-	
+
 	// Determine the number of processes
 	int np;
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
 
-	const Real pi = 4.*atan2(1.,1.);
-
-	
-	const int numberOfDimensions = 2;
-	// debug = 4: check grid points
+	// debug = 4: print the grid points (nx <= 16)
 	// debug = 3: check the approximation for U1
-	// debug = 2: check first error after each time-step
-	// debug = 1: write to debug files
+	// debug = 2: check the error after the first time steps
+	// debug = 1: write to the debug files
 	int debug = 0;
 	Real xa = -1.0, xb = 1.0; // domain is [xa,xb] X [ya,yb]
 	Real ya = -1.0, yb = 1.0;
@@ -128,146 +94,34 @@ int main(int argc, char *argv[])
 		else if( parseCommand( line, "-saveMatlab=", saveMatlab, echo) ){}
 		else if( parseCommand( line, "-matlabFileName=", matlabFileName, echo) ){}
 	}
-	
-	// Add parallel debug files
+
+	// Debug files: one per rank, in the folder debug/
 	FILE *debugFile = NULL;
 	if (debug > 0)
 	{
-		// open a debug file on each processor (in the debug folder)
+		// rank 0 creates the folder debug/ if it does not exist yet
+		if (myRank == 0 && mkdir("debug", 0755) != 0 && errno != EEXIST)
+			printf("Warning: could not create the folder debug/\n");
+		MPI_Barrier(MPI_COMM_WORLD);   // the folder exists before any rank opens its file
 		char debugFileName[80];
-		// Creat file
-		// sprintf(debugFileName, "debug/debugFileNp%dProc%d.debug", np, myRank);
 		snprintf(debugFileName, sizeof(debugFileName), "debug/debugFileNp%dProc%d.debug", np, myRank);
 		debugFile = fopen(debugFileName, "w");
-		if (debugFile == NULL && myRank == 0)
+		if (debugFile == NULL)          // checked on every rank
 		{
-			printf("Error: Debug folder does not exsit!");
-			abort();
+			printf("Error: rank %d cannot open %s\n", myRank, debugFileName);
+			MPI_Abort(MPI_COMM_WORLD, 1);
 		}
+		fprintf(debugFile, "------------------- DebugFile -------------------\n");
+		fprintf(debugFile, "------------------- np=%d, myRank=%d-------------\n\n", np, myRank);
 	}
+	if (myRank == 0)
+		printf("Usage: wave2dMPI -nx=<i> -ny=<i> -tFinal=<f> -debug=<i> -saveMatlab=[0|1|2] -matlabFileName=<s>\n");
 
-	// Write header info to both stdout and debugFile
-	for (int ifile = 0; ifile <= 1; ifile++)
-	{
-		FILE *file = ifile == 0 ? stdout : debugFile;
-		if ((ifile == 0 && myRank == 0) || // write to terminal if myRank==0
-			 (ifile == 1 && debug > 0))    	 // write to debugFile if debug>0
-		{
-			fprintf(file, "------------------- DebugFile -------------------\n");
-			fprintf(file, "------------------- np=%d, myRank=%d-------------\n\n", np, myRank);
-			fprintf(file, "Usage: wave2d -nx=<i> -tFinal=<f> -debug=<i> -saveMatlab=[0|1|2] -"
-							"matlabFile=<s>\n");
-		}
-	}
+	// Coefficients (COEFF) and exact solutions (SOLUTION); included here, inside main,
+	// because omega is evaluated at (xa,ya)
+	#include "../common/testCases.h"
 
-
-	// Define the option for coefficients
-	#define CONS 1
-	#define VAR   2
-	#ifndef COEFF
-		#define COEFF CONS
-		// #define COEFF VAR
-	#endif
-	
-	#if COEFF == CONS
-		const char *coeffName = "const";
-		#define RHO(x, y)   (1.0)
-		#define M11(x, y)   (1.0)
-		#define M11x(x, y)  (0.0)
-		#define M12(x, y)   (0.0)
-		#define M12x(x, y)  (0.0)
-		#define M21(x, y)   (0.0)
-		#define M21y(x, y)  (0.0)
-		#define M22(x, y)   (1.0)
-		#define M22y(x, y)  (0.0)
-
-	#elif COEFF == VAR
-		const char *coeffName = "var";
-		// symmetric (m12 = m21) and positive definite on (-1,1)^2
-		const Real a11 = 0.3;
-		const Real a12 = 0.2;
-		const Real a22 = 0.6;
-		#define RHO(x, y)  (0.1 * (sin((x) + (y)) + 1.1))
-		#define M11(x, y)  (a11 * ((x) + (y)) + 2.0)
-		#define M11x(x, y) (a11)
-		#define M12(x, y)  (0.5 + a12 * ((x) + (y)))
-		#define M12x(x, y) (a12)
-		#define M21(x, y)  (M12(x, y))
-		#define M21y(x, y) (a12)
-		#define M22(x, y)  (a22 * (2.0 * (x) + (y)) + 3.0)
-		#define M22y(x, y) (a22)
-
-	#endif
-
-	// Define ms solution
-	#define TRIG  1
-	#define POLY  2
-	#define PULSE 3
-	#define PULSETRIG 4
-	#ifndef SOLUTION
-		#define SOLUTION POLY
-		// #define SOLUTION TRIG
-		// #define SOLUTION PULSE
-		// #define SOLUTION PULSETRIG
-	#endif
-
-	#if SOLUTION == TRIG
-		const char *msName = "trig";
-		const Real kx = 1;
-		const Real ky = 1;
-		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
-														M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
-		#define UTRUE(x, y, t)   (3.0 * cos(kx * (x) + ky * (y) - omega * (t)))
-		#define UTRUET(x, y, t)  (3.0 * omega * sin(kx * (x) + ky * (y) - omega * (t)))
-		#define FORCE(x, y, t)   (0.0)
-	#elif SOLUTION == POLY
-		const char *msName = "poly";
-		// Coefficients for manufactured solution
-		static const Real a0 = .5, a1 = .7, a2 = .9;  // Time coefficients
-		static const Real b0 = .5, b1 = .8, b2 = .6;  // Space coefficients in x
-		static const Real c0 = .3, c1 = .25, c2 = .2; // Space coefficients in y
-		#define UTRUE(x,y,t)   ( (b0 + (x)*( b1 + (x)*b2 ))*(c0 + (y)*( c1 + (y)*c2 ))*( a0 + (t)*( a1 + (t)*a2 )) )
-		#define UTRUET(x,y,t)  ( ( b0 + (x)*( b1 +(x)*b2 ))*(c0 + (y)*( c1 + (y)*c2 ))*( a1 + 2.*(t)*a2) )
-		#define UTRUEX(x,y,t)  ( ( b1 + 2.*(x)*b2)*(c0 + (y)*( c1 + (y)*c2 ))*( a0 + (t)*( a1 + (t)*a2 )) )
-		#define UTRUEY(x,y,t)  ( (b0 + (x)*( b1 + (x)*b2 ))*(c1 + 2.*(y)*c2)*( a0 + (t)*( a1 + (t)*a2 )) )
-		#define UTRUETT(x,y,t) ( (b0 + (x)*( b1 +(x)*b2 ))*(c0 + (y)*( c1 + (y)*c2 ))*(2.*a2 + 0.*(t)) )
-		#define UTRUEXY(x,y,t) ( (b1 + 2.*(x)*b2)*(c1 + 2.*(y)*c2)*( a0 + (t)*( a1 + (t)*a2 )) )
-		#define UTRUEXX(x,y,t) ( ( 2.*b2 )*(c0 + (y)*( c1 + (y)*c2 ))*( a0 + (t)*( a1 + (t)*a2 )) )
-		#define UTRUEYY(x,y,t) ( (b0 + (x)*( b1 + (x)*b2 ))*( 2.*c2 )*( a0 + (t)*( a1 + (t)*a2 )) )
-		#define FORCE(x,y,t)   (RHO(x, y) * UTRUETT(x, y, t) -\
-													 (M11(x, y) * UTRUEXX(x, y, t) + M22(x, y) * UTRUEYY(x, y, t)) - \
-												 	 (M12(x, y) + M21(x, y)) * UTRUEXY(x, y, t) - \
-												 	 (M11x(x, y) + M21y(x, y)) * UTRUEX(x, y, t) - \
-												 	 (M12x(x, y) + M22y(x, y)) * UTRUEY(x, y, t))
-	#elif SOLUTION == PULSE
-		const char *msName = "pulse";
-		// Gaussian pulse: u = 4 exp(-beta s^2), s = kx x + ky y - omega t
-		const Real kx = 1;
-		const Real ky = 1;
-		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
-								M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
-		#define PHASE(x, y, t)  (kx * (x) + ky * (y) - omega * (t))
-		const Real beta = 3.0;
-		#define UTRUE(x, y, t)   (4.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)))
-		#define UTRUET(x, y, t)  (2.0 * beta * omega * PHASE(x, y, t) * UTRUE(x, y, t))
-		#define FORCE(x, y, t)   (0.0)
-	#elif SOLUTION == PULSETRIG
-		const char *msName = "trigPulse";
-		// Modulated pulse: u = 2 exp(-beta s^2) cos(kn s), s = kx x + ky y - omega t
-		const Real kx = 1;
-		const Real ky = 1;
-		const Real omega = sqrt(M11(xa,ya)*kx*kx + (M12(xa,ya) + M21(xa,ya))*kx*ky +
-								M22(xa,ya)*ky*ky)/sqrt(RHO(xa,ya));
-		#define PHASE(x, y, t)  (kx * (x) + ky * (y) - omega * (t))
-		const Real beta = 2.5;
-		const Real kn = 2.0;
-		#define UTRUE(x, y, t)   (2.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)) * cos(kn * PHASE(x, y, t)))
-		#define UTRUET(x, y, t)  (2.0 * beta * omega * PHASE(x, y, t) * UTRUE(x, y, t) + \
-								 kn * omega * 2.0 * exp(-beta * PHASE(x, y, t) * PHASE(x, y, t)) * sin(kn * PHASE(x, y, t)))
-		#define FORCE(x, y, t)   (0.0)
-	#endif
-
-	const int numGhost = 1;  // use Dirichlet bc's
+	const int numGhost = 1;  // one ghost layer (holds the parallel ghost lines)
 	const int n1a  = 0;
 	const int n1b  = n1a + nx;
 	const int nd1a = n1a - numGhost;
@@ -279,7 +133,8 @@ int main(int argc, char *argv[])
 	const int nd2a = n2a - numGhost;
 	const int nd2b = n2b + numGhost;
 	const int nd2  = nd2b - nd2a + 1;
-	const int nd   = nd1 * nd2; // total number of grid points
+	const int ld = paddedStride(nd1); // padded row stride (common/grid.h)
+	const int nd   = ld * nd2; // number of stored values of a global array
 	int i1, i2;
 	Real dx[2];
 	dx[0] = (xb - xa) / nx;
@@ -291,55 +146,17 @@ int main(int argc, char *argv[])
 	const int nd2a_l = n2a_l - numGhost;
 	const int nd2b_l = n2b_l + numGhost;
 	const int nd2_l  = nd2b_l - nd2a_l+1;
-	const int nd_l   = nd1 * nd2_l; // total number of local grid points
+	const int nd_l   = ld * nd2_l; // number of stored values of a local array
+	// Interior rows owned by this rank (the global boundary rows are set by the boundary conditions)
+	const int n2a_int = max(n2a_l, n2a + 1);
+	const int n2b_int = min(n2b_l, n2b - 1);
 
-	/*
-	int *boundaryCondition_p = new int[2 * numberOfDimensions];
-	#define boundaryCondition(side, axis) boundaryCondition_p[(side) + (axis) * numberOfDimensions]
-	boundaryCondition(0, 0) = dirichlet; // left
-	boundaryCondition(1, 0) = dirichlet; // right
-	if (np == 1)
-	{
-		boundaryCondition(0, 1) = dirichlet; // bottom
-		boundaryCondition(1, 1) = dirichlet; // top
-	}
-	else
-	{
-		if (myRank == 0)
-		{
-			boundaryCondition(0, 1) = dirichlet; // bottom
-			boundaryCondition(1, 1) = parallelGhost; // top
-		}
-		else if (myRank == np-1)
-		{
-			boundaryCondition(0, 1) = parallelGhost; // bottom
-			boundaryCondition(1, 1) = dirichlet; // top
-		}
-		else
-		{
-			boundaryCondition(0, 1) = parallelGhost; // bottom
-			boundaryCondition(1, 1) = parallelGhost; // top
-		}
-	}
-	*/
-	/*
-	int *gridIndex_p = new int[2*numberOfDimensions];
-	#define gridIndexRange(side,axis) gridIndex_p[(side)+(axis)*numberOfDimensions]
-	gridIndexRange(0,0) = n1a; gridIndexRange(1,0) = n1b;
-	gridIndexRange(0,1) = n2a; gridIndexRange(1,1) = n2b;
-	*/
-
-	// int numIntPar = 12;
-	// int numRealPar = 15;
-
-	// Declare vectors
+	// Local arrays: grid points, solution at three time levels, error, coefficients
 	Real *x_p[2], *u_p[3], *errCPU_p;
-	// Real *rpar_p; int *ipar_p;
 	Real *rho_p, *m11_p, *m12_p, *m21_p, *m22_p;
 	// Call the allocate function
-	allocateVectors(&x_p[0], &x_p[1], &u_p[0], &u_p[1], &u_p[2], &errCPU_p, 
+	allocateVectors(&x_p[0], &x_p[1], &u_p[0], &u_p[1], &u_p[2], &errCPU_p,
 									&rho_p, &m11_p, &m12_p, &m21_p, &m22_p, nd_l);
-
 
 	// Fill in local grid points
 	for (i2 = nd2a_l; i2 <= nd2b_l; i2++)
@@ -372,12 +189,6 @@ int main(int argc, char *argv[])
 					}
 					fprintf (file, "]\n");
 				}
-				/*
-				fprintf(file, "x[%d,%d]=[", nd1a, nd1b);
-				for (i1 = nd1a; i1 <= nd1b; i1++)
-					fprintf(file, "%f ", x(i1,n2a_l));
-				fprintf(file, "]\n");
-				*/
 
 				// Print out vector y
 				fprintf (file, "ny_l=%d [n2a_l,n2b_l]=[%d,%d] [nd2a_l,nd2b_l]=[%d,%d]\n",
@@ -392,17 +203,11 @@ int main(int argc, char *argv[])
 					}
 					fprintf(file, "]\n");
 				}
-				/*
-				fprintf(file, "y[%d,%d]=[", nd2a_l, nd2b_l);
-				for (i2=nd2a_l; i2<=nd2b_l; i2++)
-					fprintf(file, "%f ", y(n1a,i2));
-				fprintf(file, "]\n");
-				*/
-				
+
 			}
-				
+
 		}
-		
+
 		// Finish the program (optional)
 		freeVectors(x_p[0], x_p[1], u_p[0], u_p[1], u_p[2], errCPU_p,
 								rho_p, m11_p, m12_p, m21_p, m22_p);
@@ -410,9 +215,8 @@ int main(int argc, char *argv[])
 			fclose(debugFile);
 		MPI_Finalize();
 		return 0;
-		
-	} // End for checking local grid points
 
+	} // End for checking local grid points
 
 	// Fill in rho and matrix m
 	for (i2 = nd2a_l; i2 <= nd2b_l; i2++)
@@ -426,9 +230,9 @@ int main(int argc, char *argv[])
 			m22(i1,i2) = M22(x(i1,i2),y(i1,i2));
 		}
 	}
-	
 
-	// Time-step restriction: // Need to check again
+
+	// Time step: dt = cfl * min_ij sqrt(rho) / sqrt( m11/dx^2 + |m12+m21|/(4 dx dy) + m22/dy^2 )
 	Real dt_l = 10.;
 	for (i2 = n2a_l; i2 <= n2b_l; i2++) // Don't need to compute at ghost points
 	{
@@ -437,7 +241,6 @@ int main(int argc, char *argv[])
 			Real ind = sqrt(rho(i1, i2)) / sqrt(m11(i1,i2) / (dx[0] * dx[0])
 									+ fabs(m12(i1, i2) + m21(i1,i2))/(4 * dx[0] * dx[1])
 									+ m22(i1, i2) / (dx[1] * dx[1]));
-			// printf("min[%d,%d]=%4.5f\n", i1, i2,ind);
 			dt_l = min(dt_l, ind);
 		}
 	}
@@ -448,10 +251,8 @@ int main(int argc, char *argv[])
 	dt = cfl * dt;
 	int numSteps = ceil(tFinal / dt);
 	dt = tFinal / numSteps; // adjust dt to reach the final time
-	// printf("dx=%4.5f dy=%4.5f dt=%4.5f numSteps=%d\n", dx[0], dx[1], dt, numSteps);
-	
 
-	// update U0 and U1 to get started
+	// Initial conditions: U0 (exact solution at t = 0) and U1 (first step)
 	Real t = 0.;
 	int prev = 0, cur = 1;
 	for (i2 = nd2a_l; i2 <= nd2b_l; i2++)
@@ -461,23 +262,12 @@ int main(int argc, char *argv[])
 			up(i1, i2) = UTRUE(x(i1, i2), y(i1, i2), t);
 		}
 	}
-	// Approximation for U1
-	// Use Taytor expansion and the PDE for interior points
-	for (i2 = n2a_l; i2 <= n2b_l; i2++)
+	// Approximation for U1 at the interior points: Taylor expansion and the PDE
+	for (i2 = n2a_int; i2 <= n2b_int; i2++)
 	{
-		for (i1 = n1a; i1 <= n1b; i1++)
+		for (i1 = n1a + 1; i1 <= n1b - 1; i1++)
 		{
-			uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) *
-			    ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * up(i1 + 1, i2) -
-					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * up(i1, i2) +
-					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * up(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (m12(i1 + 1, i2) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
-					  m12(i1 - 1, i2) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (m21(i1, i2 + 1) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
-					  m21(i1, i2 - 1) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * up(i1, i2 + 1) -
-					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * up(i1, i2) +
-					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * up(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
+			uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) * (LH(up, i1, i2) + FORCE(x(i1, i2), y(i1, i2), t) );
 		}
 	}
 	// Update boundary
@@ -514,7 +304,7 @@ int main(int argc, char *argv[])
 		MPI_Sendrecv(&uc(n1a, n2b_l), nx + 1, MPI_DOUBLE, above, 1,
 		             &uc(n1a, nd2a_l), nx + 1, MPI_DOUBLE, below, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	}
-	
+
 	// Check error for approximation of U1
 	if (debug > 2)
 	{
@@ -556,14 +346,14 @@ int main(int argc, char *argv[])
 						fprintf(file, "]\n");
 					}
 				}
-				
+
 				fprintf(file, "On myRank=%d: maxNormL=%9.2e maxRelErrL=%9.2e,  Gathered solution: maxNormG=%9.2e maxRelErrG=%9.2e\n",
 					myRank, maxNorm, maxErr, maxNorm_g, maxErr_g);
-				
+
 			}
 		}
 		delete [] testErr_p;
-		
+
 		// Finish the program (optional)
 		freeVectors(x_p[0], x_p[1], u_p[0], u_p[1], u_p[2], errCPU_p,
 								rho_p, m11_p, m12_p, m21_p, m22_p);
@@ -571,7 +361,7 @@ int main(int argc, char *argv[])
 			fclose(debugFile);
 		MPI_Finalize();
 		return 0;
-		
+
 	} // End for debugging the approximation of U1
 
 	for (int ifile = 0; ifile <= 1; ifile++)
@@ -583,11 +373,10 @@ int main(int argc, char *argv[])
 			fprintf(file, "----- Solving Anisotropic Wave Equation in two dimensions ------\n");
 			fprintf(file, " saveMatlab=%d, matlabFileName=%s \n",saveMatlab,matlabFileName.c_str());
 			fprintf(file, " nx=%d ny=%d dt=%6.2e numSteps=%d tFinal=%6.2f\n", nx, ny,dt, numSteps, tFinal);
-			fprintf(file, " coeffs=%s, ms=%s, domain=[%g,%g]x[%g,%g], cfl=%4.2f, tFinal=%4.2f, np=%d\n",
-					coeffName, msName, xa, xb, ya, yb, cfl, tFinal, np);
+			printCase(file, coeffName, msName, xa, xb, ya, yb, cfl, tFinal, "np", np);
 		}
 	}
-	
+
 	// ---------------------------- TIME-STEPPING LOOP ------------------------------
 	Real cpu1 = getCPU();
 	for(int n=0; n<numSteps-1; n++)
@@ -598,21 +387,11 @@ int main(int argc, char *argv[])
 		const int next = (n + 2) % 3;     // next time level
 
 		// Update the interior points
-		for(i2 = n2a_l; i2 <= n2b_l; i2++)
+		for(i2 = n2a_int; i2 <= n2b_int; i2++)
 		{
-			for(i1 = n1a; i1 <= n1b; i1++)
+			for(i1 = n1a + 1; i1 <= n1b - 1; i1++)
 			{
-				un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2))*
-					((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -
-					  0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * uc(i1, i2) +
-					  0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * uc(i1 - 1, i2) ) / (dx[0] * dx[0])
-			+    (m12(i1 + 1, i2) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
-					  m12(i1 - 1, i2) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (m21(i1, i2 + 1) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
-					  m21(i1, i2 - 1) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			+    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * uc(i1, i2 + 1) -
-					  0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * uc(i1, i2) +
-					  0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * uc(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
+				un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2)) * (LH(uc, i1, i2) + FORCE(x(i1, i2), y(i1, i2), t) );
 			}
 		}
 
@@ -692,10 +471,10 @@ int main(int argc, char *argv[])
 							fprintf(file, "]\n");
 						}
 					}
-					
+
 					fprintf(file, "On myRank=%d: maxNormL=%9.2e maxRelErrL=%9.2e,  Gathered solution: maxNormG=%9.2e maxRelErrG=%9.2e\n",
 													myRank, maxNorm, maxErr, maxNorm_g, maxErr_g);
-					
+
 				}
 			}
 
@@ -710,8 +489,8 @@ int main(int argc, char *argv[])
 				MPI_Finalize();
 				return 0;
 			}
-			
-			
+
+
 		} // End for debug after first time-step
 
 	}
@@ -749,9 +528,6 @@ int main(int argc, char *argv[])
 	// Gather max cpuTime in all ranks
 	Real cpuTimeStep_g = cpuTimeStep;
 	MPI_Allreduce(&cpuTimeStep, &cpuTimeStep_g, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-	// maxErr = maxErr/maxNorm;
-	// printf("CPU: numSteps=%d nx=%d maxNorm=%8.2e maxRelErr=%8.2e cpuTime=%9.2e(s)\n",
-					//numSteps, nx, maxNorm, maxErr, cpuTimeStep);
 
 	for (int ifile = 0; ifile <= 1; ifile++)
 	{
@@ -768,28 +544,24 @@ int main(int argc, char *argv[])
 	}
 	if (myRank == 0)
 	{
-		// Same format as MATLAB (anisotropicWave_2D.m), plus the cpu time (max over ranks)
-		printf("%s: t=%4.2f Nx=%3d Ny=%3d Nt=%3d dt=%8.2e maxNorm=%8.2e maxRelErr=%8.2e cpuTime=%9.2e(s)\n",
-				msName, tFinal, nx, ny, numSteps, dt, maxNorm_g, maxErr_g, cpuTimeStep_g);
-		// Full precision for the baseline comparison with MATLAB (errMax, relErr)
-		printf("BASELINE: coeffs=%s ms=%s nx=%d numSteps=%d dt=%.16e maxErr=%.16e maxRelErr=%.16e\n",
-				coeffName, msName, nx, numSteps, dt, maxErrAbs_g, maxErr_g);
+		// Result lines (global values; cpu time = max over ranks)
+		printResults(coeffName, msName, tFinal, nx, ny, numSteps, dt, maxNorm_g, maxErrAbs_g, maxErr_g, cpuTimeStep_g);
 	}
-	
+
 	// Gather all data from various processes to rank 0
 	if (myRank == 0)
 	{
 		// Allocate space to hold grid points
 		Real *xg_p = new Real[nd];
 		Real *yg_p = new Real[nd];
-		// Alocate space to hold solution
+		// Allocate space to hold the solution
 		Real *ug_p = new Real[nd];
 		// Allocate space to hold error
 		Real *errg_p = new Real[nd];
-		#define xg(i1, i2) xg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
-		#define yg(i1, i2) yg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
-		#define ug(i1, i2) ug_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
-		#define errg(i1, i2) errg_p[(i1 - nd1a) + nd1 * (i2 - nd2a)]
+		#define xg(i1, i2) xg_p[(i1 - nd1a) + ld * (i2 - nd2a)]
+		#define yg(i1, i2) yg_p[(i1 - nd1a) + ld * (i2 - nd2a)]
+		#define ug(i1, i2) ug_p[(i1 - nd1a) + ld * (i2 - nd2a)]
+		#define errg(i1, i2) errg_p[(i1 - nd1a) + ld * (i2 - nd2a)]
 		// Copy the local data on rank 0 to the global arrays
 		for (i2=nd2a_l; i2<=nd2b_l; i2++)
 		{
@@ -807,12 +579,11 @@ int main(int argc, char *argv[])
 			// Need to get local index for each rank in the y-direction, since we are now on rank 0
 			int ny_local, n2a_local, n2b_local;
 			getLocalIndexBounds(rank, np, ny, ny_local, n2a_local, n2b_local);
-			// printf("rank=%d: ny_l=%d, n2a_l=%d, n2b_l=%d\n", rank, ny_local, n2a_local, n2b_local);
 			int dataLen;
 			if (rank < np-1)
-				dataLen = nd1*(ny_local+1);
+				dataLen = ld*(ny_local+1);
 			else
-				dataLen = nd1*(ny_local+2); // Include the ghost point on the right for rank = np-1
+				dataLen = ld*(ny_local+2); // the last rank also sends its top ghost line
 			// Receive data from other rank
 			MPI_Recv(&(xg(nd1a,n2a_local)), dataLen, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			MPI_Recv(&(yg(nd1a,n2a_local)), dataLen, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -820,13 +591,13 @@ int main(int argc, char *argv[])
 			MPI_Recv(&(errg(nd1a,n2a_local)), dataLen, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		}
 
-		// Output result for debuging if nx=10
-		if (nx<=10)
+		// Print the gathered error (debug, small grids only)
+		if (debug > 0 && nx <= 10)
 		{
 			printf("After gathering:\n");
 			for( i2 = n2a; i2 <= n2b; i2++)
 			{
-				printf("errGobal(%d:%d,%d)=[", n1a, n1b, i2);
+				printf("errGlobal(%d:%d,%d)=[", n1a, n1b, i2);
 				for( i1 = n1a; i1 <= n1b; i1++)
 				{
 					printf("%9.2e ", errg(i1, i2));
@@ -844,14 +615,13 @@ int main(int argc, char *argv[])
 			fprintf(matlabFile, "n1a=%d; n1b=%d; nd1a=%d; nd1b=%d;\n", n1a, n1b, nd1a, nd1b);
 			fprintf(matlabFile, "n2a=%d; n2b=%d; nd2a=%d; nd2b=%d;\n", n2a, n2b, nd2a, nd2b);
 			fprintf(matlabFile, "dx=%14.6e; dy=%14.6e; numGhost=%d;\n", dx[0], dx[1], numGhost);
-			// fprintf(matlabFile, "option=%d; optionName=\'%s\';\n", option, optionName.c_str());
 
 			if (saveMatlab > 1)
 			{
-				writeMatlabArray( matlabFile, xg_p, "x", nd1a, nd1b, nd2a, nd2b);
-				writeMatlabArray( matlabFile, yg_p, "y", nd1a, nd1b, nd2a, nd2b);
-				writeMatlabArray( matlabFile, ug_p, "u", nd1a, nd1b, nd2a, nd2b);
-				writeMatlabArray( matlabFile, errg_p, "err", nd1a, nd1b, nd2a, nd2b);
+				writeMatlabArray( matlabFile, xg_p, "x", nd1a, nd1b, nd2a, nd2b, ld);
+				writeMatlabArray( matlabFile, yg_p, "y", nd1a, nd1b, nd2a, nd2b, ld);
+				writeMatlabArray( matlabFile, ug_p, "u", nd1a, nd1b, nd2a, nd2b, ld);
+				writeMatlabArray( matlabFile, errg_p, "err", nd1a, nd1b, nd2a, nd2b, ld);
 			}
 			fclose(matlabFile);
 			printf("Wrote file [%s]\n",matlabFileName.c_str());
@@ -867,25 +637,14 @@ int main(int argc, char *argv[])
 		// All ranks other than 0 must send their interior data to rank 0
 		int dataLen;
 		if (myRank < np-1)
-			dataLen = nd1*(ny_l+1);
+			dataLen = ld*(ny_l+1);
 		else
-			dataLen = nd1*(ny_l+2);
+			dataLen = ld*(ny_l+2);
 		MPI_Send(&(x(nd1a,n2a_l)), dataLen, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&(y(nd1a,n2a_l)), dataLen, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&(uc(nd1a,n2a_l)), dataLen, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 		MPI_Send(&(err(nd1a,n2a_l)), dataLen, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 	}
-
-	/*
-	// Free allocated vectors on rank 0
-	if (myRank == 0)
-	{
-		delete [] xg_p;
-		delete [] yg_p;
-		delete [] ug_p;
-		delete [] errg_p;
-	}
-	*/
 
 	freeVectors(x_p[0], x_p[1], u_p[0], u_p[1], u_p[2], errCPU_p,
 							rho_p, m11_p, m12_p, m21_p, m22_p);
@@ -894,50 +653,4 @@ int main(int argc, char *argv[])
 		fclose(debugFile);
 	MPI_Finalize();
 	return 0;
-}
-
-
-// Definition of functions declared above
-void allocateVectors( 
-			double** x_p, double** y_p,
-			double** up_p, double** un_p,
-			double** uc_p, double** errCPU,
-			double** rho_p, double** m11_p,
-			double** m12_p, double** m21_p,
-			double** m22_p,
-			int nd){
-	
-	*x_p    = new double [nd];
-	*y_p    = new double [nd];
-	*up_p   = new double [nd];
-	*un_p   = new double [nd];
-	*uc_p   = new double [nd];
-	*errCPU = new double [nd];
-	*rho_p  = new double [nd];
-	*m11_p  = new double [nd];
-	*m12_p  = new double [nd];
-	*m21_p  = new double [nd];
-	*m22_p  = new double [nd];	
-}
-
-// Function to free all allocated vectors
-void freeVectors( 
-			double* x_p, double* y_p,
-			double* up_p, double* un_p,
-			double* uc_p, double* errCPU_p,
-			double* rho_p, double* m11_p,
-			double* m12_p, double* m21_p,
-			double* m22_p){
-	
-	delete [] x_p;
-	delete [] y_p;
-	delete [] up_p;
-	delete [] un_p;
-	delete [] uc_p;
-	delete [] errCPU_p;
-	delete [] rho_p;
-	delete [] m11_p;
-	delete [] m12_p;
-	delete [] m21_p;
-	delete [] m22_p;
 }

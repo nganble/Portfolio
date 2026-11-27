@@ -1,0 +1,12 @@
+# MPI timing: var poly, nx=3000, tFinal=0.01, numSteps=307, best of 3 runs
+# machine=mac  cpu=Apple M3 Pro (5P+6E cores)
+# compiler=g++-16 (Homebrew GCC 16.2.0) 16.2.0 (via mpicxx, mpirun (Open MPI) 5.0.11)  flags=-O3  commit=1461caa-modified  date=2026-11-27
+# S_ser, E_ser: relative to the serial code;  S_1, E_1: relative to mpi with np=1
+code     np       min(s)      median(s)   S_ser   E_ser   S_1     E_1    
+serial   1        2.680e+01   2.690e+01   1.00    1.00    -       -      
+mpi      1        2.690e+01   2.700e+01   1.00    1.00    1.00    1.00   
+mpi      2        1.450e+01   1.620e+01   1.85    0.92    1.86    0.93   
+mpi      4        6.980e+00   7.050e+00   3.84    0.96    3.85    0.96   
+mpi      5        6.040e+00   6.040e+00   4.44    0.89    4.45    0.89   
+mpi      8        6.380e+00   6.420e+00   4.20    0.53    4.22    0.53   
+mpi      10       6.190e+00   6.800e+00   4.33    0.43    4.35    0.43   

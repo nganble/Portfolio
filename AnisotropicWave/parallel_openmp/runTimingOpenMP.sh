@@ -7,21 +7,24 @@
 #   ./runTimingOpenMP.sh
 #   MACHINE=workstation THREADS="1 2 4 8 16" ./runTimingOpenMP.sh
 #   NX=1024 TFINAL=0.1 REPEAT=5 ./runTimingOpenMP.sh
-# Output: printed and saved to reference/timing_openmp_<MACHINE>.txt
+#   COEFF=VAR TFINAL=0.01 ./runTimingOpenMP.sh   variable coefficients (smaller dt: use a smaller tFinal)
+# Output: printed and saved to reference/timing_openmp_<MACHINE>.txt (COEFF=VAR: timing_openmp_var_<MACHINE>.txt)
 
 set -u
 cd "$(dirname "$0")"
 
-NX=${NX:-2048}
+NX=${NX:-3000}   # avoid nx near a power of two (cache conflicts, about 3x slower at 2048)
 TFINAL=${TFINAL:-0.1}
 THREADS=${THREADS:-"1 2 4 5 8 10"}
 REPEAT=${REPEAT:-3}
 MACHINE=${MACHINE:-mac}
 # Same compiler choice as the Makefile: macOS Homebrew GCC, Linux system GCC
 if [ "$(uname -s)" = Darwin ]; then CXX=${CXX:-g++-16}; else CXX=${CXX:-g++}; fi
-DEFS="-DCOEFF=CONS -DSOLUTION=POLY"
+COEFF=${COEFF:-CONS}                    # CONS | VAR
+DEFS="-DCOEFF=$COEFF -DSOLUTION=POLY"
 REF=../reference
-OUTFILE="$REF/timing_openmp_${MACHINE}.txt"
+if [ "$COEFF" = CONS ]; then caseName="const poly"; OUTFILE="$REF/timing_openmp_${MACHINE}.txt"
+else caseName="var poly"; OUTFILE="$REF/timing_openmp_var_${MACHINE}.txt"; fi
 
 BUILD=$(mktemp -d)
 trap 'rm -rf "$BUILD"' EXIT
@@ -51,7 +54,7 @@ timeRuns() {
 }
 
 {
-    echo "# OpenMP timing: const poly, nx=$NX, tFinal=$TFINAL, numSteps=$numSteps, best of $REPEAT runs"
+    echo "# OpenMP timing: $caseName, nx=$NX, tFinal=$TFINAL, numSteps=$numSteps, best of $REPEAT runs"
     echo "# machine=$MACHINE  cpu=$cpu"
     echo "# compiler=$compiler  flags=-O3  commit=$commit  date=$(date +%Y-%m-%d)"
     echo "# S_ser, E_ser: relative to the serial code;  S_1, E_1: relative to openmp with threads=1"

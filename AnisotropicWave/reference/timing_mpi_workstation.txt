@@ -1,0 +1,12 @@
+# MPI timing: const poly, nx=3000, tFinal=0.1, numSteps=236, best of 3 runs
+# machine=workstation  cpu=AMD EPYC 9455P 48-Core Processor (96 cores)
+# compiler=g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 (via mpicxx, mpirun (Open MPI) 4.1.6)  flags=-O3  commit=c728ec4  date=2026-11-27
+# S_ser, E_ser: relative to the serial code;  S_1, E_1: relative to mpi with np=1
+code     np       min(s)      median(s)   S_ser   E_ser   S_1     E_1    
+serial   1        1.260e+01   1.260e+01   1.00    1.00    -       -      
+mpi      1        1.290e+01   1.300e+01   0.98    0.98    1.00    1.00   
+mpi      2        6.480e+00   6.540e+00   1.94    0.97    1.99    1.00   
+mpi      4        3.260e+00   3.260e+00   3.87    0.97    3.96    0.99   
+mpi      8        1.740e+00   1.760e+00   7.24    0.91    7.41    0.93   
+mpi      16       9.430e-01   9.760e-01   13.36   0.84    13.68   0.85   
+mpi      32       6.070e-01   6.190e-01   20.76   0.65    21.25   0.66   
