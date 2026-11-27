@@ -1,32 +1,26 @@
-// g++ -fopenmp -o wave2dOpenMp wave2dOpenMP.C
-// ./wave2dOpenMP -nx=512 -tFinal=0.1 -numThreads=1 -debug=0
-// ./wave2dOpenMP -nx=80 -tFinal=0.1 -numThreads=1 -debug=0
-// ./wave2dOpenMP -nx=3072 -tFinal=0.05 -numThreads=10 -debug=0
-// ./wave2dOpenMP -nx=2048 -tFinal=0.1 -numThreads=10 -debug=0  (test for speedup)
-// Remember to use -O3 flag when compiling
-//
 // =====================================================================
+// ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS: OpenMP code
+//   rho w_tt = div(m grad w) + f  on (xa,xb) x (ya,yb), Dirichlet boundary conditions,
+//   explicit second-order scheme (see docs/anisotropicWaveScheme.tex)
 //
-// ANISOTROPIC WAVE EQUATION IN TWO DIMENSIONS
-//
+// Build:   make                         (default test case: COEFF=CONS, SOLUTION=POLY)
+//          make CXXFLAGS="-O3 -Wall -fopenmp -DCOEFF=VAR -DSOLUTION=POLY"
+// Run:     ./wave2dOpenMP -nx=80 -tFinal=0.5 -numThreads=4
+//          ./wave2dOpenMP -nx=3000 -tFinal=0.1 -numThreads=4     (timing)
+// Options: -nx=<i> -ny=<i> -tFinal=<f> -numThreads=<i> -debug=<i>
+//          debug=1: error after the first time step, debug=2: error of U1, debug=3: print m22
 // =====================================================================
-// Solver the anisotropic equation in two-dimension
 
 #include <stdio.h>
 #include <math.h>
 #include <float.h>
 #include <assert.h>
-#include <limits.h>
 #include <omp.h>
-#define REAL_EPSILON DBL_EPSILON
-#define REAL_MIN DBL_MIN
 
-// include commands tp parse command line arguments
-// [old] #include "parseCommand.h"
+// parseCommand(): read the command line options
 #include "../common/parseCommand.h"
 
-// getCPU() : Return the current wall-clock time in seconds
-// [old] #include "getCPU.h"
+// getCPU(): wall-clock time (omp_get_wtime)
 #include "../common/getCPU.h"
 
 // Define a new type "Real" which is equivalent to a "double"
@@ -37,16 +31,9 @@ using std::string;
 using std::max;
 using std::min;
 
-
-// function to write an array to a matlab reabable file:
-// #include "writeMatlabArray.h"
-
-
-// Macros to use later
-// Index of point (i1,i2): rows are stored with stride ld (padded, see below)
+// Position of point (i1,i2) in an array: rows are stored with the padded stride ld
 #define IDX(i1, i2) ((i1) - nd1a + ld * ((i2) - nd2a))
-// Array macros x, y, up, uc, un, err, rho, m11, m12, m21, m22: moved to common/grid.h
-// allocateVectors, freeVectors and the row stride paddedStride: moved to common/grid.h
+// Array layout and macros x, y, up, uc, un, err, rho, m11, m12, m21, m22; allocateVectors, freeVectors
 #include "../common/grid.h"
 // L_h (the spatial operator) as the macro LH(u, i1, i2)
 #include "../common/stencil.h"
@@ -55,22 +42,15 @@ using std::min;
 
 int main(int argc, char *argv[])
 {
-	const Real pi = 4.*atan2(1.,1.);
+	printf("Usage: wave2dOpenMP -nx=<i> -ny=<i> -tFinal=<f> -numThreads=<i> -debug=<i>\n");
 
-	printf("Usage: wave2d -nx=<i> -tFinal=<f> -debug=<i> -saveMatlab=[0|1|2] -"
-			"matlabFile=<s>\n");
-	
-	const int numberOfDimensions = 2;
 	int debug = 0;
-	// Real kappa = .1;
 	Real xa = -1.0, xb = 1.0; // domain is [xa,xb] X [ya,yb]
 	Real ya = -1.0, yb = 1.0;
 
 	Real tFinal = 0.5;
 	Real cfl = 0.9;
 	int nx = 100, ny = nx;
-	int saveMatlab = 0; // 1 = save a matlab file, 2 = save solution too
-	string matlabFileName = "anisotropicWave2DOpenMP.m";
 	int numThreads = 2; // number of threads for computing in parallel
 
 	string line;
@@ -82,16 +62,13 @@ int main(int argc, char *argv[])
 		else if ( parseCommand( line,"-ny=",ny) ){}
 		else if( parseCommand( line,"-debug=",debug) ){}
 		else if( parseCommand( line, "-tFinal=",tFinal) ){}
-		else if( parseCommand( line,"-saveMatlab=",saveMatlab) ){}
-		else if( parseCommand( line,"-matlabFileName=",matlabFileName) ){}
 		else if(parseCommand(line, "-numThreads=", numThreads)){}
 	}
 
-	// Coefficients (COEFF) and exact solutions (SOLUTION): moved to common/testCases.h
-	// (included here, inside main, because omega uses xa, ya)
+	// Coefficients (COEFF) and exact solutions (SOLUTION); included here, inside main,
+	// because omega is evaluated at (xa,ya)
 	#include "../common/testCases.h"
 
-// [old] 	const int numGhost = 0;  // use Dirichlet bc's
 	const int numGhost = 1;  // one ghost layer (same layout as the MPI code; not used here)
 	const int n1a  = 0;
 	const int n1b  = n1a + nx;
@@ -104,20 +81,18 @@ int main(int argc, char *argv[])
 	const int nd2a = n2a-numGhost;
 	const int nd2b = n2b+numGhost;
 	const int nd2  = nd2b-nd2a+1;
-// [old] 	const int nd   = nd1*nd2; // total number of grid points
-	const int ld = paddedStride(nd1); // row stride (rule moved to common/grid.h)
+	const int ld = paddedStride(nd1); // padded row stride (common/grid.h)
 	const int nd   = ld*nd2; // number of stored values per array
 	int i1, i2;
 	Real dx[2];
 	dx[0] = (xb-xa)/nx;
 	dx[1] = (yb-ya)/ny;
 
-	
-	// Declare vectors
+	// Arrays: grid points, solution at three time levels, error, coefficients
 	Real *x_p[2], *u_p[3], *errCPU_p;
 	Real *rho_p, *m11_p, *m12_p, *m21_p, *m22_p;
 	// Call the allocate function
-	allocateVectors(&x_p[0], &x_p[1], &u_p[0], &u_p[1], &u_p[2], &errCPU_p, 
+	allocateVectors(&x_p[0], &x_p[1], &u_p[0], &u_p[1], &u_p[2], &errCPU_p,
 									&rho_p, &m11_p, &m12_p, &m21_p, &m22_p, nd);
 
 	// Fill in grid points
@@ -164,12 +139,11 @@ int main(int argc, char *argv[])
 		}
 		return 0;
 	}
-	
 
-	// Time-step restriction: // Need to check again
+
+	// Time step: dt = cfl * min_ij sqrt(rho) / sqrt( m11/dx^2 + |m12+m21|/(4 dx dy) + m22/dy^2 )
 	Real dt = 10.;
-	Real ind;
-	#pragma omp parallel for default(shared) private(i1,i2, ind) reduction(min: dt) num_threads(numThreads)
+	#pragma omp parallel for default(shared) private(i1,i2) reduction(min: dt) num_threads(numThreads)
 	for (i2 = n2a; i2 <= n2b; i2++)
 	{
 		for (i1 = n1a; i1 <= n1b; i1++)
@@ -177,16 +151,14 @@ int main(int argc, char *argv[])
 			Real ind = sqrt(rho(i1,i2)) / sqrt( m11(i1,i2) / (dx[0] * dx[0])
 									+ fabs(m12(i1,i2) + m21(i1,i2))/(4 * dx[0] * dx[1])
 									+ m22(i1,i2) / (dx[1] * dx[1]) );
-			// printf("min[%d,%d]=%4.5f\n", i1, i2,ind);
 			dt = min(dt, ind);
 		}
 	}
 	dt = cfl * dt;
 	int numSteps = ceil(tFinal / dt);
 	dt = tFinal / numSteps; // adjust dt to reach the final time
-	// printf("dx=%4.5f dy=%4.5f dt=%4.5f numSteps=%d\n", dx[0], dx[1], dt, numSteps);
 
-	// update U0 and U1 to get started
+	// Initial conditions: U0 (exact solution at t = 0) and U1 (first step)
 	Real t = 0.;
 	int prev = 0, cur = 1;
 	for (i2=nd2a; i2<=nd2b; i2++)
@@ -196,25 +168,13 @@ int main(int argc, char *argv[])
 			up(i1,i2)= UTRUE(x(i1,i2),y(i1,i2),t);
 		}
 	}
-	// Approximation for U1
-	// Use Taytor expansion and the PDE for interior points
+	// Approximation for U1 at the interior points: Taylor expansion and the PDE
 	// Start parallel execution
 	#pragma omp parallel for default(shared) private(i1,i2) num_threads(numThreads)
 	for (i2=n2a+1; i2<=n2b-1; i2++)
 	{
 		for (i1=n1a+1; i1<=n1b-1; i1++)
 		{
-			// [old] uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) *
-			// [old] ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * up(i1 + 1, i2) -
-			// [old] 0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * up(i1, i2) +
-			// [old] 0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * up(i1 - 1, i2) ) / (dx[0] * dx[0])
-			// [old] +    (m12(i1 + 1, i2) * (up(i1 + 1, i2 + 1) - up(i1 + 1, i2 - 1)) - 
-			// [old] m12(i1 - 1, i2) * (up(i1 - 1, i2 + 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			// [old] +    (m21(i1, i2 + 1) * (up(i1 + 1, i2 + 1) - up(i1 - 1, i2 + 1)) -
-			// [old] m21(i1, i2 - 1) * (up(i1 + 1, i2 - 1) - up(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-			// [old] +    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * up(i1, i2 + 1) -
-			// [old] 0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * up(i1, i2) +
-			// [old] 0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * up(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
 			uc(i1,i2) = up(i1, i2) + dt * UTRUET(x(i1, i2), y(i1, i2), t) + (dt * dt / (2.0 * rho(i1, i2))) * (LH(up, i1, i2) + FORCE(x(i1, i2), y(i1, i2), t) );
 		}
 	}
@@ -232,7 +192,6 @@ int main(int argc, char *argv[])
 		uc(i1, n2b) = UTRUE(x(i1, n2b), y(i1, n2b), dt);
 	}
 
-
 	// Check the approximation
 	if(debug > 1)
 	{
@@ -242,20 +201,17 @@ int main(int argc, char *argv[])
 		{
 			for( i1 = n1a; i1 <= n1b; i1++ )
 			{
-				Real ue = UTRUE(x(i1, i2), y(i1, i2), dt);
 				err = fabs(uc(i1, i2) - UTRUE(x(i1, i2), y(i1, i2), dt));
 				maxErr = max(err, maxErr);
-				// printf("err[%d,%d]=%6.2e, uc=%4.7f, ue=%4.7f\n", i1, i2, err, uc(i1,i2), ue);
 			}
 		}
-		printf("Debug: check error for the approximation of U1: maxErr=%6.2e", maxErr);
+		printf("Debug: check error for the approximation of U1: maxErr=%6.2e\n", maxErr);
 		return 0;
 	}
-	
+
 	printf("----- Solving Anisotropic Wave Equation in two dimensions using openMP------\n");
-	printf(" saveMatlab=%d, matlabFileName=%s \n",saveMatlab,matlabFileName.c_str());
 	printf(" nx=%d ny=%d dt=%6.2e numSteps=%d tFinal=%6.2f\n", nx, ny,dt, numSteps, tFinal);
-	printCase(stdout, coeffName, msName, xa, xb, ya, yb, cfl, tFinal, "numThreads", numThreads); // moved to common/output.h
+	printCase(stdout, coeffName, msName, xa, xb, ya, yb, cfl, tFinal, "numThreads", numThreads);
 
 	// ---------------------------- TIME-STEPPING LOOP ------------------------------
 	Real cpu1 = getCPU();
@@ -265,30 +221,17 @@ int main(int argc, char *argv[])
 		const int prev = n%3;         // previous time level
 		const int cur  = (n+1)%3;     // current time level
 		const int next = (n+2)%3;     // next time level
-		// printf("perv=%d cur=%d next=%d\n", prev, cur, next);
 
 		// Update the interior points
 		// Start parallel execution
 		// firstprivate: each thread gets its own copy of these pointers and scalars, so the
 		// compiler can keep them in registers and vectorize the stencil
-		// [old] firstprivate(u_p, x_p, rho_p, m11_p, m12_p, m21_p, m22_p, dx, dt, t, nd1, nd1a, nd2a, prev, cur, next)
 		#pragma omp parallel for default(shared) private(i1, i2) num_threads(numThreads) \
 			firstprivate(u_p, x_p, rho_p, m11_p, m12_p, m21_p, m22_p, dx, dt, t, ld, nd1a, nd2a, prev, cur, next)
 		for(i2 = n2a+1; i2 <= n2b-1; i2++)
 		{
 			for(i1 = n1a+1; i1 <= n1b-1; i1++)
 			{
-				// [old] un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2))*
-				// [old] ((0.5 * (m11(i1 + 1, i2) + m11(i1, i2)) * uc(i1 + 1, i2) -
-				// [old] 0.5 * (m11(i1 + 1, i2) + 2.0 * m11(i1, i2) + m11(i1 - 1, i2)) * uc(i1, i2) +
-				// [old] 0.5 * (m11(i1 - 1, i2) + m11(i1, i2)) * uc(i1 - 1, i2) ) / (dx[0] * dx[0])
-				// [old] +    (m12(i1 + 1, i2) * (uc(i1 + 1, i2 + 1) - uc(i1 + 1, i2 - 1)) - 
-				// [old] m12(i1 - 1, i2) * (uc(i1 - 1, i2 + 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-				// [old] +    (m21(i1, i2 + 1) * (uc(i1 + 1, i2 + 1) - uc(i1 - 1, i2 + 1)) -
-				// [old] m21(i1, i2 - 1) * (uc(i1 + 1, i2 - 1) - uc(i1 - 1, i2 - 1))) / (4 * dx[0] * dx[1])
-				// [old] +    (0.5 * (m22(i1, i2 + 1) + m22(i1, i2)) * uc(i1, i2 + 1) -
-				// [old] 0.5 * (m22(i1, i2 + 1) + 2.0 * m22(i1, i2) + m22(i1, i2 - 1)) * uc(i1, i2) +
-				// [old] 0.5 * (m22(i1, i2 - 1) + m22(i1, i2)) * uc(i1, i2 - 1) ) / (dx[1] * dx[1]) + FORCE(x(i1, i2), y(i1, i2), t) );
 				un(i1,i2) = 2 * uc(i1, i2) - up(i1, i2) + (dt * dt / rho(i1, i2)) * (LH(uc, i1, i2) + FORCE(x(i1, i2), y(i1, i2), t) );
 			}
 		}
@@ -331,8 +274,7 @@ int main(int argc, char *argv[])
 	// ---------------------- END TIME-STEPPING LOOP ------------------------------
 	Real cpuTimeStep = getCPU() - cpu1;
 
-	// --- compute errors ---
-	// --------- Check the error ---------
+	// --- errors at t = tFinal ---
 	t += dt; // tFinal
 	if (fabs(t-tFinal) > 1e-3*dt/tFinal){
 		printf("ERROR: AFTER TIME_STEPPING: t = %16.8e IS NOT EQUAL TO tFinal = %16.8e\n", t, tFinal);
@@ -354,15 +296,11 @@ int main(int argc, char *argv[])
 	// End parallel
 
 	Real maxRelErr = maxErr/maxNorm;
-	// Result lines: moved to common/output.h
 	printResults(coeffName, msName, tFinal, nx, ny, numSteps, dt, maxNorm, maxErr, maxRelErr, cpuTimeStep);
 
 	// Free allocated vectors
-	// delete [] gridIndex_p;
 	freeVectors(x_p[0], x_p[1], u_p[0], u_p[1], u_p[2], errCPU_p,
 							rho_p, m11_p, m12_p, m21_p, m22_p);
-	
+
 	return 0;
 }
-
-// allocateVectors, freeVectors: moved to common/grid.h
