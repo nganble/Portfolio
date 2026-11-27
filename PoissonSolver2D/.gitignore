@@ -3,3 +3,6 @@ src/poisson2d_serial
 src/poisson2d_mpi
 src/poisson2d_cuda
 src/poisson2d_mpi_cuda
+
+# Slurm output (run_mpi*.sh)
+src/results/
