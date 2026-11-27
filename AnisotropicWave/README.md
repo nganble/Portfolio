@@ -9,7 +9,7 @@ This project solves the anisotropic wave equation $\rho w_{tt}=\nabla\cdot(m\nab
 ## Features
 - **Numerical method**:
   - Explicit scheme $\rho\, D_{+t}D_{-t}W = L_h W + f$, second-order accurate in space and time.
-  - $L_h$ averages $m_{11}$, $m_{22}$ at the half points and uses pointwise centered differences for the cross terms $m_{12}$, $m_{21}$. See `docs/anisotropicWaveScheme.pdf`.
+  - $L_h$ averages $m_{11}$, $m_{22}$ at the half points and uses pointwise centered differences for the cross terms $m_{12}$, $m_{21}$. SeeSee the [note](docs/anisotropicWaveScheme.pdf).
   - Time step: freeze the coefficients, do a von Neumann analysis, and take the minimum over the grid; $\Delta t = 0.9\,\Delta t_{\max}$.
 
 - **Implementation**:
@@ -34,7 +34,7 @@ Speedup $S = T_{\text{serial}}/T_p$ on a workstation (AMD EPYC 9455P, 48 cores),
 | 16    | 11.2  | 14.8  | 13.4  | 14.7  |
 | 32    | 21.6  | 26.9  | 20.8  | 24.8  |
 
-Full tables and performance notes are in `docs/anisotropicWaveScheme.pdf`; raw timings are in `reference/timing_*.txt`.
+Full tables and performance notes are in [docs/anisotropicWaveScheme.pdf](docs/anisotropicWaveScheme.pdf).
 
 ## Repository layout
 ```text
@@ -80,4 +80,4 @@ COEFF=VAR TFINAL=0.01 parallel_openmp/runTimingOpenMP.sh       # variable coeffi
 Other options: `NX` (default 3000; avoid sizes near a power of two), `TFINAL`, `REPEAT`.
 
 ## Documentation
-`docs/anisotropicWaveScheme.pdf`: numerical scheme, test cases, convergence results, and parallel speedup.
+[docs/anisotropicWaveScheme.pdf](docs/anisotropicWaveScheme.pdf): numerical scheme, test cases, convergence results, and parallel speedup.
