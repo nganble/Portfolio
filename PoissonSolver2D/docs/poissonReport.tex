@@ -1,45 +1,57 @@
 \documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage[a4paper,head=15pt,body={17cm,25cm},top=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
 \usepackage{tikz}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-\usepackage{float}
-\usepackage{url}
-% \usepackage[backend=biber,style=numeric]{biblatex}
-% \addbibresource{project.bib}
-% \usepackage{tcolorbox}
-% \usepackage{amsmath}
-\input{macros}
-%\input{project}
-% This document has been heavily adapted from previous waves of conference templates 
-% ------------------------------------------------------------------------
-% --------------- DO NOT EDIT THE FILE ABOVE THIS LINE -------------------
-% ------------------------------------------------------------------------
+\usepackage{cite}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
 
+% Section titles: bold, normal size
+\setlength{\columnsep}{3em}
+\titleformat{\section}{\normalfont\bfseries}{\thesection}{2ex}{}
+\titlespacing*{\section}{0pt}{2.5ex}{1ex}
+\titleformat{\subsection}{\normalfont\bfseries}{\thesubsection}{2ex}{}
+\titlespacing*{\subsection}{0pt}{2.5ex}{1ex}
+\setlength{\abovecaptionskip}{0pt}
+\setlength{\belowcaptionskip}{0pt}
 
-% Put additional \usepackage commands here. Use additional packages sparingly, not to change the overall layout of the paper.
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}[definition]{Theorem}
 
-% Add your Macro definitions here.
-
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{\bfseries\thepage}
+\fancyhead[L]{\bfseries CSCI 6360: Parallel Computing, Final Project}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+\fancypagestyle{plain}{\fancyhead{}}
 
 \begin{document}
 
-\begin{wavespaper}{%
-% Put the paper title here e.g
+\twocolumn[
+  \begin{center}
+    \bfseries Parallel Solver for Poisson's Equations in Two Dimensions
+    \bigskip
 
-Parallel Solver for Poisson's Equations in Two Dimensions
-}{%
-% Put the list of authors here, using \wavesauthor or \wavesspeaker commands
+    Ngan Le
+    \smallskip
 
-%\wavesauthor[][]{Daniel Appel\"{o}}{Department of Mathematics, Virginia Tech., Blacksburg, USA} 
-% \wavesauthor[leb2@rpi.edu][]{Ngan Le}{Department of Mathematical Sciences, Rensselaer Polytechnic Institute, Troy, NY 12180, USA}
-\wavesauthor[][]{Ngan Le}{Department of Mathematical Sciences, Rensselaer Polytechnic Institute, Troy, NY 12180, USA}
-
-}
+    \mdseries Department of Mathematical Sciences, Rensselaer Polytechnic Institute, Troy, NY 12180, USA
+  \end{center}
+]
 
 \section*{Abstract}
 We develop a parallel solver for Poisson's equations in two dimensions. The methods are based on the Successive Over-Relaxation (SOR($\omega$)) techniques, which iteratively solve the linear system derived from the spatial discretization using finite difference approximation of the Poisson problem.
 The method divides the points on the grid into red and black points. The grid points of the same color can be updated in parallel without conflicting with each other because they are independent of each other. Thus, at each iteration, the SOR($\omega$) method updates all the red grid points in one step, and then updates all the black points in the second step. 
-% Each red and black update can be done in parallel.
 This approach offers a great way for parallelism using the MPI and CUDA frameworks, since the computation at each iteration can be done in parallel effectively. 
 Numerical results are illustrated, including solver verification, weak scaling, strong scaling, and runtime analysis in parallel using MPI and CUDA, demonstrating the potential of the parallel solvers for large-scale problems in scientific computing.
 
@@ -49,7 +61,7 @@ Numerical results are illustrated, including solver verification, weak scaling, 
 \section{Introduction}
 %Helmholtz problems often arise in many applications in science and engineering, including acoustics, electromagnetic scattering, medical imaging, geophysical modeling, seismics, $\dots$. \\
 Poisson's equation is a class of elliptic partial differential equations. These equations often arise in a variety of fields in science and engineering, with their applications ranging from electrostatics, fluid dynamics, and thermodynamics, among others. 
-Thus, designing an effective solver for Poisson's equation is a crucial task for a wide range of fundamental applications. In this project, we implement the parallel solver for Poisson's equation in two dimensions. The solver is based on the finite difference method \cite{leveque} by first discretizing the domain problem using central second-order approximations, leading to a large but sparse linear system. Then the resulting linear system is solved iteratively using SOR($\omega$) methods with the red-black ordering \cite{adams1988,young1954,zhang1996}. This ordering gives an advantageous method in which the grid points are updated, in the sense that updating the grid nodes only involves the black points and vice versa. Consequently, each iteration involves one step of updating red nodes, followed by another step of updating black points, and due to the independence, each update can be done in parallel. The parallel solvers are developed using MPI and CUDA platforms. Numerical results are presented demonstrating the algorithm showing the substantial speedups and scalability for the problems in three dimensions. In particular, for certain problem sizes, we can gain up to 100x speedups compared to that of serial solvers.
+Thus, designing an effective solver for Poisson's equation is a crucial task for a wide range of fundamental applications. In this project, we implement the parallel solver for Poisson's equation in two dimensions. The solver is based on the finite difference method \cite{leveque} by first discretizing the domain problem using central second-order approximations, leading to a large but sparse linear system. Then the resulting linear system is solved iteratively using SOR($\omega$) methods with the red-black ordering \cite{adams1988,young1954,zhang1996}. This ordering gives an advantageous method in which the grid points are updated, in the sense that updating the grid nodes only involves the black points and vice versa. Consequently, each iteration involves one step of updating red nodes, followed by another step of updating black points, and due to the independence, each update can be done in parallel. The parallel solvers are developed using MPI and CUDA platforms. Numerical results are presented demonstrating the algorithm showing the substantial speedups and scalability for the problems in three dimensions. In particular, for certain problem sizes, we can gain up to $27\times$ speedups compared to that of serial solvers.
 
 There has been a wide range of solvers developed for solving Poisson's equation as well as elliptic equations in general. On the one hand, the resulting discretized linear system resulting from the spatial discretization can be solved by direct methods based on sparse factorization, including sparse LU, Cholesky \cite{hackbusch1994, saad2003}. However, the methods are limited as the problem sizes grow, especially for problems in three dimensions because of the fill-ins leading to the requirement for a significant amount of storage. Hence, for large-scale problems, iterative methods are favored over direct methods. Classical iterative methods such as Jacobi's, Gauss-Seidel, and SOR, which are discussed in Section~\ref{sec:methods}, are one of the simplest approaches for solving linear systems. Despite their simplicity, these methods are essential in more advanced methods. For example, they are used as relaxation schemes in multigrid methods \cite{brandt1977,briggs2000}, and as preconditioners for GMRES \cite{trefethen1997,trottenberg2001} and domain decomposition methods \cite{smith1996}. Alternatively, Poisson's equation can be solved directly based on fast Fourier transform \cite{cooley1965,hockney1988}. Depending on the problem's geometries, some of the methods can be advantageous over the others. A good comparision of these methods is given in \cite{gholami2016}. 
 
@@ -113,7 +125,7 @@ Or in a compact form,
 \begin{align}
     u_{i+1,j}+u_{i-1,j} - 4u_{i,j} + u_{i,j+1}+u_{i,j-1} = h^2 f_{ij}.\label{eq:discreteEqn}
 \end{align}
-This holds for $i=1,2,\cdots, N$ and $j=1,2,\cdots,N$. This is called a \textit{$5$-point stencil} approximation, giving the second-order accurate approximation \cite{?} to the problem in~\eqref{eq:poisson2d}. Each equation involves 5 points, as illustrated in Figure\ref{fig:stencil}.
+This holds for $i=1,2,\cdots, N$ and $j=1,2,\cdots,N$. This is called a \textit{$5$-point stencil} approximation, giving the second-order accurate approximation \cite{leveque} to the problem in~\eqref{eq:poisson2d}. Each equation involves 5 points, as illustrated in Figure\ref{fig:stencil}.
 \begin{figure}[htb]
 \begin{center}
     \begin{tikzpicture}[scale=1.5]
@@ -155,7 +167,7 @@ From the boundary conditions, we know $u_{0,j}=u_{N+1,j} = u_{i,0}=u_{i,N+1}$. T
 \end{align}
 where $\mathbf{x}$ is the vector containing all the unknonws $u_{ij}$ and $\mathbf{b}$ is the vector holding $f_{ij}$.
 One method for solving the matrix system in~\eqref{eq: matrixSystem} is simply to use a sparse matrix solver. This is manageable when the problem is not large. However, for large-scale problems, especially problems in 3D, direct methods can be disadvantageous due to the fill-ins, and they require significantly more storage. Thus for large-scale problems, iterative methods are preferred over direct methods. There have been various methods developed for solving the large-scale linear systems. Our focus in this project is the SOR methods. The methods give a fundamental understanding for more advanced methods that can be used later.
-The time and space complexity of some direct and iterative solvers are summarized in Table~\ref {tab:summarySolvers} (see \cite{demmel1993,demmel997} for more details).
+The time and space complexity of some direct and iterative solvers are summarized in Table~\ref {tab:summarySolvers} (see \cite{demmel1993,demmel1997} for more details).
 
 \begin{table}[htb]
 %\begin{center}
@@ -476,7 +488,7 @@ Or equivalently,
 \end{align}
 Thus, this defines a fixed-point iteration for SOR($\omega$) method (the subscripit $\text{SOR($\omega$)}$ is used to indicate these matrices for SOR($\omega$)).
 \begin{align}
-    \mathbf{x}^{(m+1)} = \mathbf{R_{\text{SOR($\omega$)}}}\mathbf{x}^{(m)} + \mathbf{c_{\text{SOR($\omega$)}}}, \label{eq:FPIGS}
+    \mathbf{x}^{(m+1)} = \mathbf{R_{\text{SOR($\omega$)}}}\mathbf{x}^{(m)} + \mathbf{c_{\text{SOR($\omega$)}}}, \label{eq:FPISOR}
 \end{align}
 where the formula for $\mathbf{R_{\text{SOR($\omega$)}}}$ and $\mathbf{c_{\text{SOR($\omega$)}}}$ are given by
 \begin{subequations}
@@ -517,7 +529,7 @@ Returning to our model problem, there is a little change in the algorithm as for
 \end{algorithm}
 With a suitable choice of $\omega$, which will be discussed in the next section, the Algorithm~\ref{alg:oneStepSORPoisson} gives a better convergence rate for the model problem, and again, grid nodes of the same color can be updated independently. The implementation of the parallel solvers for the model problem will be carried out based on this algorithm.
 \subsection{Convergence of Jacobi's, Gauss-Seidel, and SOR($\omega$) Methods on the Poisson's Model Problems in Two Dimensions}
-This section summarizes the convergence rates of the methods discussed above. For a more detailed analysis, see \cite{?}. Recall that the convergence rate of the fixd-point iteration~\eqref{eq:FPI} depends on the spectral radius of the matrix $\mathbf{R}$. Thus, the convergence rate for Jacobi's, Gauss-Seidel, and SOR($\omega$) methods for the model problem~\eqref{eq:poisson2d} depends on the eigenvalues of matrices $\mathbf{R}_{J}$, $\mathbf{R}_{\text{GS}}$, and $\mathbf{R}_{\text{SOR($\omega$)}}$, respectively.
+This section summarizes the convergence rates of the methods discussed above. For a more detailed analysis, see \cite{demmel1997,varga1962}. Recall that the convergence rate of the fixed-point iteration~\eqref{eq:FPI} depends on the spectral radius of the matrix $\mathbf{R}$. Thus, the convergence rate for Jacobi's, Gauss-Seidel, and SOR($\omega$) methods for the model problem~\eqref{eq:poisson2d} depends on the eigenvalues of matrices $\mathbf{R}_{J}$, $\mathbf{R}_{\text{GS}}$, and $\mathbf{R}_{\text{SOR($\omega$)}}$, respectively.
 
 For the Jacobi's method, the eigenvalues of the matrix $\mathbf{R}_{J}$ for the model problem are given by $1-\lambda_{ij}/4$, where $\lambda_{ij}/4$ is given by
 \begin{align}
@@ -764,7 +776,7 @@ J. W. Cooley and J. W. Tukey, An algorithm for the machine calculation of comple
 \bibitem{demmel1993}
 J. Demmel, The complexity of solving linear systems, \textit{Acta Numerica}, \textbf{2} (1993), pp. 201--272.
 
-\bibitem{demmel997}
+\bibitem{demmel1997}
 J. W. Demmel, \textit{Applied Numerical Linear Algebra}, SIAM, Philadelphia, 1997.
 
 \bibitem{gholami2016}
@@ -805,6 +817,5 @@ J. Zhang, Acceleration of red-black Gauss-Seidel method in multigrid for Poisson
 % --------------- DO NOT EDIT THE FILE BELOW THIS LINE -------------------
 % ------------------------------------------------------------------------
 
-\end{wavespaper}
 
 \end{document}
