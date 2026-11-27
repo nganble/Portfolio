@@ -28,9 +28,13 @@
 
 #include "poisson2d_mpi.h"
 
-#define  USE_MPI 1
+#ifndef USE_MPI
+#define USE_MPI 1
+#endif
 
+#ifndef USE_POWER9
 #define USE_POWER9 1
+#endif
 
 #include "timing.h"
 
@@ -121,12 +125,14 @@ int main(int argc, char *argv[]){
 	// -------- Options to debug ----------
 	bool display_ginfo 		= false;
 	bool display_mesh 		= false;
+#if HAS_EXACT_SOLUTION
 	bool display_ini 		= false;
+	bool display_err 		= false;
+#endif
 	bool display_one_step_r	= false;
 	bool display_one_step_b = false;
 	bool display_comm 		= false;
 	bool display_res 		= false;
-	bool display_err 		= false;
 
 
 	if (debug == 1 && display_ginfo == true){
@@ -204,8 +210,8 @@ int main(int argc, char *argv[]){
 	int num_devices;
 	cuda_get_device_count(&num_devices);
 
-	// Assume 4 GPUs per node
-	int device = my_rank % 4;
+	// Rank r uses GPU (r mod number of GPUs on its node)
+	int device = my_rank % num_devices;
 
 	cuda_set_device(device);
 
