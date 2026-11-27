@@ -1,13 +1,11 @@
-%--------------------- Anisotropic wave equationin 2D --------------------%
-%--------------------- rho*u_tt=\div(m*\div u) ---------------------------%
-%--------------------- u=u(x,y,t), rho=rho(x,y)---------------------------%
-%---------------------          [ m_11(x,y) m_12(x,y)]--------------------%
-%--------------------- m=m(x,y)=[                    ]--------------------%
-%---------------------          [ m_21(x,y) m_22(x,y)]--------------------%
-%--------------------- (x,y)\in [a,b]*[c,d], t>0 -------------------------%
-
-
-
+%% anisotropicWave_2D.m
+% Anisotropic wave equation in two dimensions
+%   rho(x,y) u_tt = div( m(x,y) grad u ) + f(x,y,t),   (x,y) in (ax,bx) x (ay,by),  t > 0
+%   m = [m11 m12; m21 m22] (symmetric, positive definite), Dirichlet boundary conditions,
+%   explicit second-order scheme (see docs/anisotropicWaveScheme.tex)
+%
+% Standalone: set ms and coeffs below and run the script.
+% Baseline:   run runBaselineMATLAB.m (sets ms, coeffs, saveRef and calls this script).
 
 if ~exist('cases','var')        % standalone run: set the case here
     clc;
@@ -25,7 +23,6 @@ ay = -1; by = 1;
 % Wavenumbers
 kx = 1;
 ky = 1;
-
 
 plotSol = false;
 makeMovie = 0;  % 0=no movie (convergence test) | 1=make movie | 2=save movie too
@@ -50,7 +47,7 @@ else
     else
         tFinal = 1.2;
     end
-    
+
 end
 
 cfl = 0.9;
@@ -86,7 +83,6 @@ else
     end
 end
 
-
 %%  Function rho and matrix m
 if (strcmp(coeffs,"const"))            % isotropic: rho = 1, m = I
     RHO = @(x,y) 1 + 0*x + 0*y;
@@ -117,7 +113,7 @@ elseif (strcmp(coeffs,"piecewise"))    % left: x<0, right: x>=0
     % derivatives are not used: piecewise runs only with "gauss" (f = 0)
 end
 
-% Dispersive relation -- only use for constant variable cases
+% Dispersion relation of the plane waves (exact solutions only for constant coefficients)
 omega = sqrt(M11(ax,ay)*kx^2+(M12(ax,ay)+M21(ax,ay))*kx*ky+...
         M22(ax,ay)*ky^2)/sqrt(RHO(ax,ay));
 
@@ -140,11 +136,9 @@ elseif (strcmp(ms,"trig"))
     % Exact solution
     ue  = @(x,y,t) 3*cos(kx*x+ky*y-omega*t);
     uet = @(x,y,t) 3*omega*sin(kx*x+ky*y-omega*t);
-    %ue = @(x,y,t) 3*sin(kx*x+ky*y-omega*t)+3*cos(kx*x+ky*y-omega*t);
-    %uet = @(x,y,t) -3*omega*cos(kx*x+ky*y-omega*t)+3*omega*sin(kx*x+ky*y-omega*t);
 elseif (strcmp(ms,"pulse"))
     beta = 3;
-    x0 = 0; % Central of the pulse
+    x0 = 0; % center of the pulse
     ue = @(x,y,t) 4*exp(-beta*(kx*x+ky*y-omega*t-x0).^2);
     uet = @(x,y,t) 2*beta*omega*(kx*x+ky*y-omega*t-x0).*ue(x,y,t);
 elseif (strcmp(ms,"trigPulse"))
@@ -156,7 +150,7 @@ elseif (strcmp(ms,"trigPulse"))
     uet = @(x,y,t) 2*beta*omega*(kx*x+ky*y-omega*t-x0).*ue(x,y,t)...
             +kn*omega*2*exp(-beta*(kx*x+ky*y-omega*t-x0).^2)...
             .*sin(kn*(kx*x+ky*y-omega*t-x0));
-    
+
 end
 
 % Initial conditions and boundary conditions and forcing
@@ -181,20 +175,16 @@ elseif (strcmp(ms,"gaussForce"))
     gby = @(x,t) 0.*x+0.*t;
     f = @(x,y,t) 2*exp(-gamma*(((x-x0)/sigmaX).^2+((y-y0)/sigmaY).^2)).*sin(gamma*t);
 else
-    
+
     u0   = @(x,y) ue(x,y,0);
     u1   = @(x,y) uet(x,y,0);
-    u0xx = @(x,y) uedxdx(x,y,0);
-    u0yy = @(x,y) uedydy(x,y,0);
-    u1xx = @(x,y) uetxx(x,y,0);
-    u1yy = @(x,y) uetyy(x,y,0);
-    
+
     % Boundary conditions
     gax = @(y,t) ue(ax,y,t);
     gbx = @(y,t) ue(bx,y,t);
     gay = @(x,t) ue(x,ay,t);
     gby = @(x,t) ue(x,by,t);
-    
+
     % Forcing term
     if (strcmp(ms, "poly"))
         f = @(x,y,t) RHO(x,y).*uett(x,y,t)-M11(x,y).*uexx(x,y,t)...
@@ -224,7 +214,7 @@ for m = startInd:numResolutions
     Nx = 10*2^m; Ny = 10*2^m;
     dx = (bx-ax)/Nx;
     dy = (by-ay)/Ny;
-    iax = 1; iay = 1; 
+    iax = 1; iay = 1;
     ibx = iax+Nx; iby = iay+Ny;
     i1x = iax+1;  i1y = iay+1;
     i2x = ibx-1;  i2y = iby-1;
@@ -249,20 +239,9 @@ for m = startInd:numResolutions
     m12 = M12(x,y);
     m21 = M21(x,y);
     m22 = M22(x,y);
-    
-%     % Define difference operators
-%     xDef = @(u,m,I,J) (m(x(I,J)+dx/2,y(I,J)).*u(I+1,J)...
-%         -(m(x(I,J)+dx/2,y(I,J))+m(x(I,J)-dx/2,y(I,J))).*u(I,J)...
-%         +m(x(I,J)-dx/2,y(I,J)).*u(I-1,J))/(dx^2);
-%     yDef = @(u,m,I,J) (m(x(I,J),y(I,J)+dy/2).*u(I,J+1)...
-%         -(m(x(I,J),y(I,J)+dy/2)+m(x(I,J),y(I,J)-dy/2)).*u(I,J)...
-%         +m(x(I,J),y(I,J)-dy/2).*u(I,J-1))/(dy^2);
-%     xyDef = @(u,m,I,J) (m(x(I+1,J),y(I,J)).*(u(I+1,J+1)-u(I+1,J-1))...
-%         -m(x(I-1,J),y(I,J)).*(u(I-1,J+1)-u(I-1,J-1)))/(4*dx*dy);
-%     yxDef = @(u,m,I,J) (m(x(I,J),y(I,J+1)).*(u(I+1,J+1)-u(I-1,J+1))...
-%         -m(x(I,J),y(I,J-1)).*(u(I+1,J-1)-u(I-1,J-1)))/(4*dx*dy);
-    
-    % New difference operators
+
+    % Difference operators: L_h u = xDef(u,m11) + xyDef(u,m12) + yxDef(u,m21) + yDef(u,m22)
+    % (D+x[M11 D-x u], D0x[m12 D0y u], D0y[m21 D0x u], D+y[M22 D-y u]; see the note)
     xDef = @(u,m,I,J) ((1/2)*(m(I+1,J)+m(I,J)).*u(I+1,J)...
         -((1/2)*(m(I+1,J)+2*m(I,J)+m(I-1,J))).*u(I,J)...
         +((1/2)*(m(I,J)+m(I-1,J))).*u(I-1,J))/(dx^2);
@@ -273,28 +252,21 @@ for m = startInd:numResolutions
         -m(I-1,J).*(u(I-1,J+1)-u(I-1,J-1)) )/(4*dx*dy);
     yxDef = @(u,m,I,J) (m(I,J+1).*(u(I+1,J+1)-u(I-1,J+1))...
         -m(I,J-1).*(u(I+1,J-1)-u(I-1,J-1)))/(4*dx*dy);
-    
+
     % Time stepping
     dt = cfl*min(min(sqrt(rho)./sqrt( m11/(dx^2)+abs((m12...
         +m21))/(4*dx*dy)+m22/(dy^2) )));
     Nt = ceil(tFinal/dt);
     dt = tFinal/Nt; % adjust dt to exactly reach tFinal
-    
-    % Allocate space for solution
-    % unm1 = zeros(Ngx,Ngy);
+
+    % Allocate space for the solution
     un   = zeros(Ngx,Ngy);
     unp1 = zeros(Ngx,Ngy);
-    
+
     t = 0;
     % Update u0 and u1 to get started
     unm1 = u0(x,y);
-%     % Approximation for u1
-%     un(I,J) = unm1(I,J)+dt*u1(x(I,J),y(I,J))+(dt^2./(2*RHO(x(I,J),y(I,J))))...
-%         .*(xDef(unm1,M11,I,J)+xyDef(unm1,M12,I,J)...
-%         +yxDef(unm1,M21,I,J)+yDef(unm1,M22,I,J)+f(x(I,J),y(I,J),0));
-
-    %New Approximation for u1
-    % Approximation for u1
+    % Approximation for u1: Taylor expansion and the PDE
     un(I,J) = unm1(I,J)+dt*u1(x(I,J),y(I,J))+(dt^2./(2*rho(I,J)))...
         .*(xDef(unm1,m11,I,J)+xyDef(unm1,m12,I,J)...
         +yxDef(unm1,m21,I,J)+yDef(unm1,m22,I,J)+f(x(I,J),y(I,J),0));
@@ -310,19 +282,11 @@ for m = startInd:numResolutions
         errMax = max(max(abs(err)));
         fprintf('Debug: Check approx for U1: maxErr=%8.2e\n', errMax);
         return;
-    end    
-    
-
+    end
 
     %-----------------------Start time-stepping loop----------------------%
     for n = 1:Nt-1
         t = n*dt;
-%         % Interior points
-%         unp1(I,J) = 2*un(I,J)-unm1(I,J)+(dt^2./RHO(x(I,J),y(I,J))).*...
-%             (xDef(un,M11,I,J)+xyDef(un,M12,I,J)+yxDef(un,M21,I,J)...
-%             +yDef(un,M22,I,J)+f(x(I,J),y(I,J),t));
-        
-        % New interior points
         % Interior points
         unp1(I,J) = 2*un(I,J)-unm1(I,J)+(dt^2./rho(I,J)).*...
             (xDef(un,m11,I,J)+xyDef(un,m12,I,J)+yxDef(un,m21,I,J)...
@@ -332,15 +296,15 @@ for m = startInd:numResolutions
         unp1(ibx,I2b) = gbx(y(ibx,I2b),t+dt);
         unp1(I1b,iay) = gay(x(I1b,iay),t+dt);
         unp1(I1b,iby) = gby(x(I1b,iby),t+dt);
-        
+
         if(debug>0 && n==1)
             uExact = ue(x,y,t+dt);
             err = uExact-unp1;
             errMax = max(max(abs(err)));
-            fprintf('Debug: after frist time-step: maxErr=%8.2e\n',errMax);
+            fprintf('Debug: after the first time-step: maxErr=%8.2e\n',errMax);
             return;
         end
-        
+
        % Make a movie
        if (strcmp(coeffs,"const"))
            if (strcmp(ms, "trig"))
@@ -364,15 +328,9 @@ for m = startInd:numResolutions
        if (makeMovie>0 && m==startInd && mod(n,step)==0)
            figure(1);
            surf(x,y,unp1);
-           %surf(x,y,ue(x,y,t));
            colormap(getRainbow);
            xlabel("x"); ylabel("y"); zlabel("u");
-           % shading interp;
-           % view(0,90); % top view
-           az = min(min(unp1));
-           bz = max(max(unp1));
            title(sprintf("2D-Anisotropic Wave Equation t=%4.2e",t + dt));
-           %axis([ax bx ay by az bz]);
            if (strcmp(coeffs,"const"))
                if (strcmp(ms,"trig"))
                    axis([ax bx ay by -3.5 3.5]);
@@ -399,7 +357,6 @@ for m = startInd:numResolutions
                end
            end
            if (strcmp(topView,"on"))
-               %shading interp; 
                view(0,90); % top view
            end
            drawnow
@@ -411,14 +368,14 @@ for m = startInd:numResolutions
                writeVideo(videoWriterObj, frameImage);
            end
        end
-       
+
         % Update unm1 & un for next step
         unm1 = un;
         un = unp1;
-        
+
     end
     %-----------------------End time-stepping loop------------------------%
-    
+
     %% Check error
     if (makeMovie==0 && ~startsWith(ms, "gauss") && (strcmp(coeffs,"const")||strcmp(ms,"poly")))
         % Compute error
@@ -435,9 +392,9 @@ for m = startInd:numResolutions
         else
             fprintf('\n');
         end
-        
-        %% Plot results optional 
-        if((m==3) && plotSol && (~strcmp(ms,'poly'))) % Plot for ms difers than poly
+
+        %% Plot results optional
+        if((m==3) && plotSol && (~strcmp(ms,'poly'))) % plot for ms different from poly
             figure(1);
             surf(x,y,un);
             colormap(getRainbow);
@@ -451,7 +408,7 @@ for m = startInd:numResolutions
             title(sprintf("Error, N_x=%d",Nx));
             xlabel("x"); ylabel("y"); zlabel("err");
         end
-        
+
     end
 end
 if (makeMovie>1)
